@@ -33,6 +33,11 @@ class AbstractCLICommand(ABC):
             help="where to perform the action"
         )
         parser.add_argument(
+            "--image",
+            default=None,
+            help="specify docker image"
+        )
+        parser.add_argument(
             "-o",
             "--outdir",
             default=None,

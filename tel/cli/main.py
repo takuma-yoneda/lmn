@@ -6,9 +6,12 @@ import pathlib
 
 import tel
 from tel import __version__
-from tel.machine import Machine, SSHMachine, DockerMachine
+from tel.config import DockerContainerConfig, SlurmConfig
+from tel.helpers import find_project_root
+from tel.machine import Machine, SSHMachine, DockerMachine, SlurmMachine
 
 from tel.cli.commands.run import CLIRunCommand
+from simple_slurm_command import SlurmCommand
 
 _supported_commands = {
     'run': CLIRunCommand
@@ -45,10 +48,27 @@ def run():
     parsed = cmd_parser.parse_args(remaining)
     # sanitize workdir
     # parsed.workdir = os.path.abspath(parsed.workdir)
+
+    # TODO: find a correct project directory
     # TEMP: use current dir as a project
     current_dir = pathlib.Path(os.getcwd()).resolve()
-    parsed.workdir = current_dir
+    parsed.workdir = find_project_root()
+    print('Project directory is set to', parsed.workdir)
     parsed.name = current_dir.stem
+
+
+    # Read from tel config file and reflect it
+    # TODO: clean this up
+    from tel.helpers import parse_config
+    config = parse_config()
+    if parsed.machine not in config['machines']:
+        raise KeyError(
+            f'Machine {parsed.machine} not found in the configuration.\n'
+            f'Available machines are: {config["machines"].keys()}'
+        )
+    machine = config['machines'].get(parsed.machine)
+    user, host = machine['user'], machine['host']
+
 
     # execute command
     # machine = SSHMachine('takuma', 'birch.ttic.edu')# TEMP
@@ -58,9 +78,39 @@ def run():
 
     from tel.project import Project
     from tel.machine import RemoteConfig
-    remote_conf = RemoteConfig('takuma', 'birch.ttic.edu')
-    project = Project(parsed.name, parsed.workdir)
-    machine = DockerMachine(project, remote_conf)
+    from tel.config import DockerContainerConfig, SlurmConfig
+    remote_conf = RemoteConfig(user, host)
+
+    # TODO: This looks horrible. Clean up.
+    # If args.image is given, look for the corresponding name in config
+    # if not found, regard it as a full name of the image
+    if parsed.image:
+        if parsed.image in config['docker-images']:
+            image = config['docker-images'].get(parsed.image).get('name')
+        else:
+            image = parsed.image
+        docker_conf = DockerContainerConfig(image, f'{user}-{parsed.name}')
+    else:
+        docker_conf = None
+
+    # Parse slurm configuration
+    slurm_conf = config['machines'][parsed.machine].get('slurm')
+    slurm_conf = SlurmConfig(**slurm_conf) if slurm_conf else None
+    if slurm_conf:
+        slurm_conf.output = f'{SlurmCommand.JOB_ARRAY_MASTER_ID}_{SlurmCommand.JOB_ARRAY_ID}.out'
+    print('slurm_conf', slurm_conf)
+
+    project = Project(parsed.name, parsed.workdir, out_dir=parsed.outdir,
+                      docker=docker_conf, slurm=slurm_conf)
+    print('project:', project)
+
+
+    # NOTE: If default slurm config is set on a machine, tel assumes to always use slurm.
+    if 'slurm' in config['machines'][parsed.machine]:
+        machine = SlurmMachine(project, remote_conf)
+    else:
+        machine = SSHMachine(project, remote_conf)
+
     command.execute(machine, parsed)
 
     # enable debug
