@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
-import shutil
+import pathlib
 
 from tel.machine import Machine
-from tel.project import Project
 from tel.cli import AbstractCLICommand
 from typing import Optional, List
 
@@ -77,7 +75,7 @@ class CLIRunCommand(AbstractCLICommand):
         return parser
 
     @staticmethod
-    def execute(machine: Machine, parsed: argparse.Namespace) -> None:
+    def execute(machine: Machine, parsed: argparse.Namespace, relative_workdir: pathlib.Path=pathlib.Path('.')) -> None:
         """Deploy the local repository and execute the command on a machine.
 
         1. get SSH connection to machine
@@ -110,6 +108,6 @@ class CLIRunCommand(AbstractCLICommand):
             rsync(source_dir=project.root_dir, target_dir=machine.uri(project.remote_rootdir), options=rsync_options)
 
         print('remote command', parsed.remote_command)
-        result = machine.execute(parsed.remote_command, disown=parsed.disown, shell=True, x_forward=parsed.x_forward)
+        result = machine.execute(parsed.remote_command, relative_workdir, disown=parsed.disown, shell=True, x_forward=parsed.x_forward)
         print('--- result ---\n', result)
         print('=== completed ===')

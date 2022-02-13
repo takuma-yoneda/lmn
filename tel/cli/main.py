@@ -53,8 +53,10 @@ def run():
     # TEMP: use current dir as a project
     current_dir = pathlib.Path(os.getcwd()).resolve()
     parsed.workdir = find_project_root()
-    print('Project directory is set to', parsed.workdir)
-    parsed.name = current_dir.stem
+    print('Project root directory:', parsed.workdir)
+    print('relative working dir:', current_dir.relative_to(parsed.workdir))  # cwd.relative_to(project_root)
+    relative_workdir = current_dir.relative_to(parsed.workdir)
+    parsed.name = parsed.workdir.stem
 
 
     # Read from tel config file and reflect it
@@ -66,8 +68,8 @@ def run():
             f'Machine {parsed.machine} not found in the configuration.\n'
             f'Available machines are: {config["machines"].keys()}'
         )
-    machine = config['machines'].get(parsed.machine)
-    user, host = machine['user'], machine['host']
+    machine_conf = config['machines'].get(parsed.machine)
+    user, host = machine_conf['user'], machine_conf['host']
 
 
     # execute command
@@ -94,13 +96,14 @@ def run():
         docker_conf = None
 
     # Parse slurm configuration
-    slurm_conf = config['machines'][parsed.machine].get('slurm')
+    slurm_conf = machine_conf.get('slurm')
     slurm_conf = SlurmConfig(**slurm_conf) if slurm_conf else None
-    if slurm_conf:
-        slurm_conf.output = f'{SlurmCommand.JOB_ARRAY_MASTER_ID}_{SlurmCommand.JOB_ARRAY_ID}.out'
+    # if slurm_conf:
+    #     slurm_conf.output = f'{SlurmCommand.JOB_ARRAY_MASTER_ID}_{SlurmCommand.JOB_ARRAY_ID}.out'
     print('slurm_conf', slurm_conf)
 
-    project = Project(parsed.name, parsed.workdir, out_dir=parsed.outdir,
+    project = Project(parsed.name, parsed.workdir, remote_dir=machine_conf.get('root_dir'),
+                      out_dir=parsed.outdir,
                       docker=docker_conf, slurm=slurm_conf)
     print('project:', project)
 
@@ -111,7 +114,7 @@ def run():
     else:
         machine = SSHMachine(project, remote_conf)
 
-    command.execute(machine, parsed)
+    command.execute(machine, parsed, relative_workdir=relative_workdir)
 
     # enable debug
     # if parsed.debug:

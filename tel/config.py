@@ -100,9 +100,7 @@ class SlurmConfig:
         self.cpus_per_task = cpus_per_task
         self.time = time
         self.dependency = dependency
-
-        from simple_slurm_command import SlurmCommand
-        self.output = f'{SlurmCommand.JOB_ARRAY_MASTER_ID}_{SlurmCommand.JOB_ARRAY_ID}.out'
+        self.output = output
 
 
 class SingularityConfig:

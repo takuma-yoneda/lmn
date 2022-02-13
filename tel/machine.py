@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 from abc import ABC
 import os
-from os.path import join as pJoin
+from os.path import join as pjoin
 from typing import Optional, Union
 from tel.project import Project
+
+import fabric
+import invoke
 
 DOCKER_WORKDIR = '/ws'
 DOCKER_OUTDIR = '/output'
@@ -37,7 +40,7 @@ class Machine(ABC):
         self.remote_conf = remote_conf
         self.project = project
 
-    def execute(self, cmd, disown=False, shell=True, use_gpus=True, x_forward=False) -> bool:
+    def execute(self, cmd, relative_workdir, disown=False, shell=True, use_gpus=True, x_forward=False) -> bool:
         raise NotImplementedError()
 
 
@@ -63,19 +66,24 @@ class SSHMachine(Machine):
     def remote_uri(self):
         return f'{self.remote_conf.base_uri}:{self.project.remote_rootdir}'
 
-    def execute(self, cmd, disown=False, shell=True, use_gpus=True, x_forward=False) -> bool:
+    def execute(self, cmd, relative_workdir, disown=False, shell=True, use_gpus=True, x_forward=False) -> Union[None, invoke.runners.Result]:
 
         if self.project.docker is None:
             if isinstance(cmd, list):
                 cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
             print('ssh run with command:', cmd)
-            with self.conn.cd(self.project.remote_rootdir):
-                promise = self.conn.run(cmd, asynchronous=True)
-                result = promise.join()
-                # NOTE: If you wanna run synchronously
-                # result = self.conn.run(cmd)
+            with self.conn.cd(self.project.remote_rootdir / relative_workdir):
+                # promise = self.conn.run(cmd, asynchronous=True)
+                if disown:
+                    # NOTE: asynchronous=True --> disown=True
+                    # asynchronous=True returns a Promise to which you can attach and listen to stdio.
+                    # disown=True completely disowns the process.
+                    self.conn.run(cmd, disown=True)
+                    return
 
-
+                # NOTE: if you use asynchronous=True, stdout/stderr does not show up
+                # when you use it on slurm. I have no idea why, tho.
+                result = self.conn.run(cmd, asynchronous=False)
             return result
         else:
             # Using docker
@@ -93,8 +101,8 @@ class SSHMachine(Machine):
                 self.project.docker.use_x_forward(target_home=f'/home/{self.remote_conf.user}')
 
             # Mount project dir
-            container_workdir = pJoin(DOCKER_WORKDIR, self.project.name)
-            container_outdir = pJoin(DOCKER_OUTDIR, self.project.name)
+            container_workdir = pjoin(DOCKER_WORKDIR)
+            container_outdir = pjoin(DOCKER_OUTDIR)
             self.project.docker.mounts += [Mount(target=container_workdir, source=self.project.remote_rootdir, type='bind'),
                                            Mount(target=container_outdir, source=self.project.remote_outdir, type='bind')]
             self.project.docker.environment.update({'TEL_PROJECT_ROOT': container_workdir, 'TEL_OUTPUT_ROOT': container_outdir})
@@ -105,32 +113,36 @@ class SSHMachine(Machine):
                 cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
             if self.project.docker.tty:
                 startup = 'sleep 2'
-                cmd = f'/bin/bash -c \'{startup} && {cmd}\''
+                cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {container_outdir} \''
             print('docker run with command:', cmd)
 
             # NOTE: Intentionally being super verbose to make arguments explicit.
             container = self.client.containers.run(self.project.docker.image,
-                                                cmd,
-                                                name=f'{self.remote_conf.user}-{self.project.name}',
-                                                remove=self.project.docker.remove,
-                                                network=self.project.docker.network,
-                                                ipc_mode=self.project.docker.ipc_mode,
-                                                detach=self.project.docker.detach,
-                                                tty=self.project.docker.tty,
-                                                mounts=self.project.docker.mounts,
-                                                environment=self.project.docker.environment,
-                                                device_requests=self.project.docker.device_requests,
-                                                working_dir=container_workdir
-                                                # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
-                                                )
+                                                   cmd,
+                                                   name=f'{self.remote_conf.user}-{self.project.name}',
+                                                   remove=self.project.docker.remove,  # Keep it running as we need to change
+                                                   network=self.project.docker.network,
+                                                   ipc_mode=self.project.docker.ipc_mode,
+                                                   detach=self.project.docker.detach,
+                                                   tty=self.project.docker.tty,
+                                                   mounts=self.project.docker.mounts,
+                                                   environment=self.project.docker.environment,
+                                                   device_requests=self.project.docker.device_requests,
+                                                   working_dir=str(container_workdir / relative_workdir),
+                                                   # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
+                                                   )
             print('container', container)
             if disown:
                 print('NOTE: disown is set to True. Output files will not be transported to your local directory.')
             else:
+                # Block and listen to the stream from container
                 stream = container.logs(stream=True, follow=True)
                 print('--- listening container stdout/stderr ---\n')
                 for char in stream:
                     print(char.decode('utf-8'), end='')
+
+            # NOTE: I end up including it in cmd.
+            # container.exec_run(['chmod', '-R', 'a+rw', container_outdir])
 
 
         # Rsync remote outdir with the local outdir.
@@ -141,11 +153,15 @@ class SSHMachine(Machine):
 
 
 class SlurmMachine(SSHMachine):
-    """Use srun/sbatch to submit the command on a remote machine."""
+    """Use srun/sbatch to submit the command on a remote machine.
+
+    If your local machine has slurm (i.e., you're on slurm login-node), I guess you don't need this tool.
+    Thus SlurmMachine inherits SSHMachine.
+    """
     def __init__(self, project: Project, remote_conf: RemoteConfig) -> None:
         super().__init__(project, remote_conf)
 
-    def execute(self, cmd, disown=False, shell=True, use_gpus=True, x_forward=False, batch=True) -> bool:
+    def execute(self, cmd, relative_workdir, disown=False, shell=True, use_gpus=True, x_forward=False, batch=False) -> bool:
         from simple_slurm_command import SlurmCommand
         assert not x_forward, 'X11 forwarding is not supported in slurm'
 
@@ -163,15 +179,19 @@ class SlurmMachine(SSHMachine):
                                      dependency=s.dependency,
                                      output=s.output)
 
+        if not batch and s.output is not None:
+            # User may expect stdout shown on the console.
+            print('--output argument for Slurm is set. stdout/stderr will not show up in the console.')
+
         if batch:
             cmd = slurm_command.sbatch(cmd)
-            print('sbatch\n', cmd)
+            print('sbatch mode:\n', cmd)
         else:
             cmd = slurm_command.srun(cmd)
-            print('srun\n', cmd)
+            print('srun mode:\n', cmd)
 
         # Does it work??
-        super().execute(cmd, self.project.root_dir)
+        super().execute(cmd, relative_workdir)
 
 class DockerMachine(SSHMachine):
     """A class to execute any code for a specific project.
@@ -198,8 +218,8 @@ class DockerMachine(SSHMachine):
         base_url = "ssh://" + self.remote_conf.base_uri
         self.client = docker.DockerClient(base_url=base_url, use_ssh_client=True)  # TODO: Make it singleton??
 
-        self.workdir = pJoin(DOCKER_WORKDIR, project.name)
-        self.outdir = pJoin(DOCKER_OUTDIR, project.name)
+        self.workdir = pjoin(DOCKER_WORKDIR, project.name)
+        self.outdir = pjoin(DOCKER_OUTDIR, project.name)
 
         assert self.project.docker, 'project.docker cannot be None when DockerMachine is used.'
 
