@@ -27,12 +27,6 @@ class AbstractCLICommand(ABC):
         #     help="Directory containing the CPK project"
         # )
         parser.add_argument(
-            "-m",
-            "--machine",
-            default=None,
-            help="where to perform the action"
-        )
-        parser.add_argument(
             "--image",
             default=None,
             help="specify docker image"

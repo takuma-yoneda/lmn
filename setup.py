@@ -30,7 +30,7 @@ setup(
         "Operating System :: MacOS",
         "Operating System :: Unix",
     ],
-    install_requires=["fabric", "docker"],
+    install_requires=["fabric", "docker", "randomname"],
     # extras_require={
     #     "lint": [
     #         "black>=19.10b0,<=20.8",
