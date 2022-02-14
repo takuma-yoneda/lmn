@@ -19,7 +19,6 @@ class CLIRunCommand(AbstractCLICommand):
 
         parser.add_argument(
             "machine",
-            const=True,
             action="store",
             type=str,
             help="Machine",
@@ -27,7 +26,6 @@ class CLIRunCommand(AbstractCLICommand):
         parser.add_argument(
             "-m",
             "--mode",
-            const=True,
             action="store",
             type=str,
             default=None,
@@ -80,6 +78,14 @@ class CLIRunCommand(AbstractCLICommand):
             help="Docker entrypoint",
         )
         parser.add_argument(
+            "-n",
+            "--num-sequence",
+            action="store",
+            type=int,
+            default=1,
+            help="number of sequence in Slurm sequential jobs"
+        )
+        parser.add_argument(
             "remote_command",
             default=False,
             action="store",
@@ -104,8 +110,8 @@ class CLIRunCommand(AbstractCLICommand):
         from tel.machine import RemoteConfig
         if parsed.machine not in config['machines']:
             raise KeyError(
-                f'Machine {parsed.machine} not found in the configuration.\n'
-                f'Available machines are: {config["machines"].keys()}'
+                f'Machine "{parsed.machine}" not found in the configuration. '
+                f'Available machines are: {list(config["machines"].keys())}'
             )
         machine_conf = config['machines'].get(parsed.machine)
         user, host = machine_conf['user'], machine_conf['host']
@@ -162,7 +168,7 @@ class CLIRunCommand(AbstractCLICommand):
             print('docker_conf:', docker_conf)
 
             docker_machine = DockerMachine(docker_client, project, docker_conf=docker_conf)
-            docker_machine.execute(parsed.remote_command, shell=True, use_gpus=True, x_forward=parsed.x_forward)
+            docker_machine.execute(parsed.remote_command, relative_workdir, shell=True, use_gpus=True, x_forward=parsed.x_forward)
 
         elif mode == "slurm":
             from tel.config import SlurmConfig
@@ -174,7 +180,7 @@ class CLIRunCommand(AbstractCLICommand):
             print('slurm_conf', slurm_conf)
 
             slurm_machine = SlurmMachine(ssh_client, project, slurm_conf)
-            slurm_machine.execute(parsed.remote_command, relative_workdir, interactive=not parsed.disown, n_sequence=parsed.n_sequence)
+            slurm_machine.execute(parsed.remote_command, relative_workdir, interactive=not parsed.disown, num_sequence=parsed.num_sequence)
 
         elif mode == "singularity":
             raise NotImplementedError()

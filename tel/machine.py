@@ -3,6 +3,7 @@ from abc import ABC
 import os
 from os.path import join as pjoin
 from typing import Optional, Union
+from docker import DockerClient
 from tel.config import DockerContainerConfig
 from tel.project import Project
 
@@ -37,6 +38,7 @@ class RemoteConfig:
 
 class SSHClient:
     def __init__(self, remote_conf: RemoteConfig) -> None:
+        self.remote_conf = remote_conf
         self.conn = self.remote_conf.get_connection()
 
     def uri(self, path):
@@ -89,7 +91,7 @@ class SlurmMachine:
         self.project = project
         self.slurm_conf = slurm_conf
 
-    def execute(self, cmd, relative_workdir, shell=True, interactive=False, n_sequence=1) -> None:
+    def execute(self, cmd, relative_workdir, shell=True, interactive=False, num_sequence=1) -> None:
         # TODO: I should notice that SSHMachine.execute, SlurmMachin.execute, and DockerMachine.execute don't really share arguments.
         # Should treat them as separate classes.
         from simple_slurm_command import SlurmCommand
@@ -100,15 +102,15 @@ class SlurmMachine:
         if shell:
             cmd = f'bash -c \'{cmd}\''
 
-        if n_sequence > 1:
+        if num_sequence > 1:
             # Use sbatch and set dependency to singleton
             self.project.slurm.dependency = 'singleton'
             if interactive:
-                print('WARN: n_sequence is set to {n_sequence} > 1. Force disabling interactive mode')
+                print('WARN: num_sequence is set to {n_sequence} > 1. Force disabling interactive mode')
                 interactive = False
 
         # Obtain slurm cli command
-        s = self.project.slurm
+        s = self.slurm_conf
 
         import randomname
         user_maxlen = 8
@@ -136,7 +138,7 @@ class SlurmMachine:
             cmd = slurm_command.sbatch(cmd)
             print('sbatch mode:\n', cmd)
             # TODO: Simply repeat the command n_sequence times ('&&'.join([cmd] * n_sequence) ??)
-            for _ in range(n_sequence):
+            for _ in range(num_sequence):
                 self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir), disown=False)
 
 
@@ -238,7 +240,3 @@ class DockerMachine:
         container_list = self.client.containers.list(all=all, filters={'ancestor': self.project.docker.image})
         return container_list
 
-
-class LocalMachine(Machine):
-    def __init__(self, user, host, port=22) -> None:
-        super().__init__(user, host, port=port)

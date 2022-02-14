@@ -5,7 +5,6 @@ import os
 from abc import abstractmethod, ABC
 from typing import Optional, Type
 
-from tel.machine import Machine
 from tel.types import Arguments
 
 
@@ -66,7 +65,7 @@ class AbstractCLICommand(ABC):
 
     @staticmethod
     @abstractmethod
-    def execute(machine: Machine, parsed: argparse.Namespace) -> bool:
+    def execute(config: dict, parsed: argparse.Namespace, relative_workdir: str) -> bool:
         pass
 
 
