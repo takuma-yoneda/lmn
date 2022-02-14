@@ -33,7 +33,7 @@ class RemoteConfig:
         from fabric.config import Config
         config = Config()
         config.user = self.user
-        conn = Connection(host=self.host, config=config)
+        conn = Connection(host=self.host, config=config, inline_ssh_env=True)
         return conn
 
 class SSHClient:
@@ -44,20 +44,22 @@ class SSHClient:
     def uri(self, path):
         return f'{self.remote_conf.base_uri}:{path}'
 
-    def run(self, cmd, directory='$HOME', disown=False, hide=False):
+    def run(self, cmd, directory='$HOME', disown=False, hide=False, env=None):
         # TODO: Check if $HOME would work or not!!
+        env = {} if env is None else env
         with self.conn.cd(directory):
             # promise = self.conn.run(cmd, asynchronous=True)
             if disown:
                 # NOTE: asynchronous=True --> disown=True
                 # asynchronous=True returns a Promise to which you can attach and listen to stdio.
                 # disown=True completely disowns the process.
-                self.conn.run(cmd, disown=True, hide=hide)
+                self.conn.run(cmd, disown=True, hide=hide, env=env)
                 return
 
             # NOTE: if you use asynchronous=True, stdout/stderr does not show up
             # when you use it on slurm. I have no idea why, tho.
-            result = self.conn.run(cmd, asynchronous=False, hide=hide)
+            print('ssh client env', env)
+            result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env)
         return result
 
     def port_forward(self):
@@ -76,8 +78,10 @@ class SSHMachine:
         if isinstance(cmd, list):
             cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
         print('ssh run with command:', cmd)
-        print('cd', self.project.remote_rootdir / relative_workdir)
-        return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir), disown=disown)
+        print('cd to', self.project.remote_rootdir / relative_workdir)
+        telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
+        return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
+                               disown=disown, env=telenv)
 
 
 class SlurmMachine:
@@ -104,7 +108,7 @@ class SlurmMachine:
 
         if num_sequence > 1:
             # Use sbatch and set dependency to singleton
-            self.project.slurm.dependency = 'singleton'
+            self.slurm_conf.dependency = 'singleton'
             if interactive:
                 print('WARN: num_sequence is set to {n_sequence} > 1. Force disabling interactive mode')
                 interactive = False
@@ -130,16 +134,21 @@ class SlurmMachine:
             # User may expect stdout shown on the console.
             print('--output argument for Slurm is set. stdout/stderr will not show up in the console.')
 
+        telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
         if interactive:
             cmd = slurm_command.srun(cmd)
             print('srun mode:\n', cmd)
-            return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir), disown=False)
+            print('cd to', self.project.remote_rootdir / relative_workdir)
+            return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
+                                   disown=False, env=telenv)
         else:
             cmd = slurm_command.sbatch(cmd)
             print('sbatch mode:\n', cmd)
-            # TODO: Simply repeat the command n_sequence times ('&&'.join([cmd] * n_sequence) ??)
-            for _ in range(num_sequence):
-                self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir), disown=False)
+            print('cd to', self.project.remote_rootdir / relative_workdir)
+
+            cmd = '\n'.join([cmd] * num_sequence)
+            self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
+                            disown=False, env=telenv)
 
 
 class DockerMachine:
@@ -204,22 +213,23 @@ class DockerMachine:
             cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {container_outdir} \''
         print('docker run with command:', cmd)
 
+        print('container workdir:', str(container_workdir / relative_workdir))
         # NOTE: Intentionally being super verbose to make arguments explicit.
         d = self.docker_conf
         container = self.client.containers.run(d.image,
                                                cmd,
                                                name=d.name,
-                                                remove=d.remove,  # Keep it running as we need to change
-                                                network=d.network,
-                                                ipc_mode=d.ipc_mode,
-                                                detach=d.detach,
-                                                tty=d.tty,
-                                                mounts=d.mounts,
-                                                environment=d.environment,
-                                                device_requests=d.device_requests,
-                                                working_dir=str(container_workdir / relative_workdir),
-                                                # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
-                                                )
+                                               remove=d.remove,  # Keep it running as we need to change
+                                               network=d.network,
+                                               ipc_mode=d.ipc_mode,
+                                               detach=d.detach,
+                                               tty=d.tty,
+                                               mounts=d.mounts,
+                                               environment=d.environment,
+                                               device_requests=d.device_requests,
+                                               working_dir=str(container_workdir / relative_workdir),
+                                               # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
+                                               )
         print('container', container)
         if disown:
             print('NOTE: disown is set to True. Output files will not be transported to your local directory.')
