@@ -16,7 +16,31 @@ def yield_parents(directory: Path, max_depth=None) -> Iterator[Path]:
         yield directory
 
 
-def parse_config():
+def merge_nested_dict(a, b, path=None, conflict='use_b'):
+    """Merge dictionary b into a (can be nested)
+
+    Correspondence: https://stackoverflow.com/a/7205107/7057866
+    """
+    if path is None: path = []
+    for key in b:
+        if key in a:
+            if isinstance(a[key], dict) and isinstance(b[key], dict):
+                merge_nested_dict(a[key], b[key], path + [str(key)])
+            elif a[key] == b[key]:
+                pass # same leaf value
+            else:
+                if conflict == 'use_b':
+                    a[key] = b[key]
+                elif conflict == 'use_a':
+                    pass
+                else:
+                    raise ValueError('Conflict at %s' % '.'.join(path + [str(key)]))
+        else:
+            a[key] = b[key]
+    return a
+
+
+def parse_config(project_root):
     """ Parse tel config (json file)
 
     It looks for config file in this order:
@@ -24,21 +48,31 @@ def parse_config():
     2. $HOME/.tel.config
     3. $HOME/.config/tel
     """
-
-    # TODO: Hmmm... a better way to write this config search algorithm?
     import json
     from os.path import expandvars, isfile
-    candidate_paths = ['${HOME}/.tel.config', '${HOME}/.config/tel']
-    for path in candidate_paths:
+
+    def _maybe_load(path):
+        if isfile(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+        return {}
+
+    # TODO: Hmmm... a better way to write this config search algorithm?
+    global_conf_paths = ['${HOME}/.tel.config', '${HOME}/.config/tel']
+    for path in global_conf_paths:
         path = expandvars(path)
         if isfile(path):
             break
-
     with open(path, 'r') as f:
-        config = json.load(f)
+        global_conf = json.load(f)
 
-    config = remove_recursively(config, key='__help')
-    return config
+    local_conf = _maybe_load(f'{project_root}/.tel.config')
+
+    global_conf = remove_recursively(global_conf, key='__help')
+    local_conf = remove_recursively(local_conf, key='__help')
+
+    merged_conf = merge_nested_dict(global_conf, local_conf)
+    return merged_conf
 
 def remove_recursively(config_dict, key='__help'):
     """remove entry with the specified key recursively."""

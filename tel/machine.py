@@ -44,7 +44,7 @@ class SSHClient:
     def uri(self, path):
         return f'{self.remote_conf.base_uri}:{path}'
 
-    def run(self, cmd, directory='$HOME', disown=False, hide=False, env=None):
+    def run(self, cmd, directory='$HOME', disown=False, hide=False, env=None, pty=False):
         # TODO: Check if $HOME would work or not!!
         env = {} if env is None else env
         with self.conn.cd(directory):
@@ -53,13 +53,13 @@ class SSHClient:
                 # NOTE: asynchronous=True --> disown=True
                 # asynchronous=True returns a Promise to which you can attach and listen to stdio.
                 # disown=True completely disowns the process.
-                self.conn.run(cmd, disown=True, hide=hide, env=env)
+                self.conn.run(cmd, disown=True, hide=hide, env=env, pty=pty)
                 return
 
             # NOTE: if you use asynchronous=True, stdout/stderr does not show up
             # when you use it on slurm. I have no idea why, tho.
             print('ssh client env', env)
-            result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env)
+            result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
         return result
 
     def port_forward(self):
@@ -74,14 +74,22 @@ class SSHMachine:
         self.client = client
         self.project = project
 
-    def execute(self, cmd, relative_workdir, disown=False, shell=True, use_gpus=True, x_forward=False) -> None:
+    def execute(self, cmd, relative_workdir, startup=None, disown=False, use_gpus=True, x_forward=False, env=None) -> None:
+        env = {} if env is None else env
         if isinstance(cmd, list):
             cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
+
+        if startup:
+            cmd = f'{startup} && {cmd}'
+        # cmd = f'bash -c \'{cmd}\''
+        # cmd = f'bash -c \'{cmd}\''
+
         print('ssh run with command:', cmd)
         print('cd to', self.project.remote_rootdir / relative_workdir)
         telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
+        env.update(telenv)
         return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                               disown=disown, env=telenv)
+                               disown=disown, env=env)
 
 
 class SlurmMachine:
@@ -95,16 +103,14 @@ class SlurmMachine:
         self.project = project
         self.slurm_conf = slurm_conf
 
-    def execute(self, cmd, relative_workdir, shell=True, interactive=False, num_sequence=1) -> None:
+    def execute(self, cmd, relative_workdir, startup=None, interactive=False, num_sequence=1, env=None, job_name=None) -> None:
         # TODO: I should notice that SSHMachine.execute, SlurmMachin.execute, and DockerMachine.execute don't really share arguments.
         # Should treat them as separate classes.
         from simple_slurm_command import SlurmCommand
+        env = {} if env is None else env
 
         if isinstance(cmd, list):
             cmd = ' '.join(cmd)
-
-        if shell:
-            cmd = f'bash -c \'{cmd}\''
 
         if num_sequence > 1:
             # Use sbatch and set dependency to singleton
@@ -116,11 +122,12 @@ class SlurmMachine:
         # Obtain slurm cli command
         s = self.slurm_conf
 
-        import randomname
-        user_maxlen = 8
-        proj_name_maxlen = 10
-        user = self.client.remote_conf.user
-        job_name = f'{user[:user_maxlen]}-{self.project.name[:proj_name_maxlen]}-{randomname.get_name()}'
+        if job_name is None:
+            import randomname
+            import random
+            proj_name_maxlen = 15
+            rand_num = random.randint(0, 100)
+            job_name = f'tel-{self.project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
         slurm_command = SlurmCommand(cpus_per_task=s.cpus_per_task,
                                      job_name=job_name,
                                      partition=s.partition,
@@ -135,20 +142,27 @@ class SlurmMachine:
             print('--output argument for Slurm is set. stdout/stderr will not show up in the console.')
 
         telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
+        env.update(telenv)
+
+        if startup:
+            cmd = f'{startup} && {cmd}'
+
         if interactive:
+            cmd = f'bash -i -c \'{cmd}\''
             cmd = slurm_command.srun(cmd)
+
             print('srun mode:\n', cmd)
             print('cd to', self.project.remote_rootdir / relative_workdir)
             return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                                   disown=False, env=telenv)
+                                   disown=False, env=env)
         else:
-            cmd = slurm_command.sbatch(cmd)
+            cmd = slurm_command.sbatch(cmd, shell='/bin/bash')
             print('sbatch mode:\n', cmd)
             print('cd to', self.project.remote_rootdir / relative_workdir)
 
             cmd = '\n'.join([cmd] * num_sequence)
             self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                            disown=False, env=telenv)
+                            disown=False, env=env)
 
 
 class DockerMachine:
@@ -180,7 +194,8 @@ class DockerMachine:
         # TODO: Pull the image if it doesn't exsit locally
 
 
-    def execute(self, cmd, relative_workdir, disown=False, shell=True, use_gpus=True, x_forward=False):
+    def execute(self, cmd, relative_workdir, startup=None, disown=False, shell=True, use_gpus=True, x_forward=False, env=None):
+        env = [] if env is None else env
 
         # Using docker
         import docker
@@ -203,13 +218,14 @@ class DockerMachine:
         self.docker_conf.mounts += [Mount(target=container_workdir, source=self.project.remote_rootdir, type='bind'),
                                         Mount(target=container_outdir, source=self.project.remote_outdir, type='bind')]
         self.docker_conf.environment.update({'TEL_PROJECT_ROOT': container_workdir, 'TEL_OUTPUT_ROOT': container_outdir})
+        self.docker_conf.environment.update(env)
         print('mounts', self.docker_conf.mounts)
         print('docker_conf', self.docker_conf)
 
         if isinstance(cmd, list):
             cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
         if self.docker_conf.tty:
-            startup = 'sleep 2'
+            startup = 'sleep 2' if startup is None else startup
             cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {container_outdir} \''
         print('docker run with command:', cmd)
 

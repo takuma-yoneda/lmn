@@ -66,7 +66,7 @@ def run():
     # Read from tel config file and reflect it
     # TODO: clean this up
     from tel.helpers import parse_config
-    config = parse_config()
+    config = parse_config(parsed.workdir)
 
     command.execute(config, parsed, relative_workdir=relative_workdir)
 

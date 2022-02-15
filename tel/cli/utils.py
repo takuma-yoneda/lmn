@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import subprocess
 
-def rsync(source_dir, target_dir, options=''):
+def rsync(source_dir, target_dir, options='', exclude=None):
     import shutil
+    exclude = [] if exclude is None else exclude
     # make sure rsync is installed
     if shutil.which("rsync") is None:
         raise RuntimeError("rsync binary is not found.")
@@ -11,7 +12,9 @@ def rsync(source_dir, target_dir, options=''):
     source_dir = str(source_dir).rstrip('/') + '/'
     target_dir = str(target_dir).rstrip('/') + '/'
 
-    cmd = f"rsync --archive --compress {options} {source_dir} {target_dir}"
+    exclude_str = ' '.join(f'--exclude \'{ex}\'' for ex in exclude)
+
+    cmd = f"rsync --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
     print('running command', cmd)
     run_cmd(cmd, shell=True)
     print("Sync finished!")

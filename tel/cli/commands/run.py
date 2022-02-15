@@ -85,6 +85,21 @@ class CLIRunCommand(AbstractCLICommand):
             default=1,
             help="number of sequence in Slurm sequential jobs"
         )
+        # TEMP: Sweep functionality
+        parser.add_argument(
+            "--sweep",
+            action="store",
+            type=str,
+            help="specify sweep range (e.g., --sweep 1-255) this is reflected to envvar $TEL_RUN_SWEEP_IDX"
+                 "Temporarily only available for slurm mode."
+        )
+        # TEMP:
+        parser.add_argument(
+            "--conf",
+            action="store",
+            type=str,
+            help="slurm / docker / singularity custom config"
+        )
         parser.add_argument(
             "remote_command",
             default=False,
@@ -117,6 +132,8 @@ class CLIRunCommand(AbstractCLICommand):
         user, host = machine_conf['user'], machine_conf['host']
         remote_conf = RemoteConfig(user, host)
 
+        project_conf = config.get('project')
+
 
         from os.path import join as pjoin
         from tel.project import Project
@@ -127,20 +144,48 @@ class CLIRunCommand(AbstractCLICommand):
         print('project:', project)
 
 
+        # NOTE: Order to check 'mode'
+        # 1. If specified in cli --> use that mode
+        # 2. If default_mode is set (config file) --> use that mode
+        # 3. Use ssh mode
         mode = parsed.mode if parsed.mode else machine_conf.get('default_mode', 'ssh')
 
         from tel.machine import SSHClient
         ssh_client = SSHClient(remote_conf)
 
+        # TODO: Hmmm ugly... let's fix it later
         # rsync the remote directory
         # A trick to create non-existing directory before running rsync (https://www.schwertly.com/2013/07/forcing-rsync-to-create-a-remote-path-using-rsync-path/)
+        if 'rsync' in config:
+            exclude = config['rsync'].get('exclude')
+        else:
+            exclude = []
+
+        if project_conf and 'rsync' in project_conf:
+            exclude.extend(project_conf['rsync'].get('exclude', []))
+
         rsync_options = f"--rsync-path='mkdir -p {project.remote_rootdir} && mkdir -p {project.remote_outdir} && rsync'"
-        rsync(source_dir=project.root_dir, target_dir=ssh_client.uri(project.remote_rootdir), options=rsync_options)
+        rsync(source_dir=project.root_dir, target_dir=ssh_client.uri(project.remote_rootdir), options=rsync_options, exclude=exclude)
+
+
+        # TODO: Clean it up later!!
+        # Set environment variables
+        # TEMP: only check envvars from conf['project']['environment']
+        if project_conf and 'environment' in project_conf:
+            env = project_conf['environment']
+        else:
+            env = {}
+
+        machine_envs = machine_conf.get('environment')
+        if machine_envs:
+            env.update(machine_envs)
 
         if mode == "ssh":
             from tel.machine import SSHMachine
             ssh_machine = SSHMachine(ssh_client, project)
-            ssh_machine.execute(parsed.remote_command, relative_workdir, disown=parsed.disown, shell=True, x_forward=parsed.x_forward)
+            ssh_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
+                                         disown=parsed.disown, x_forward=parsed.x_forward, env=env)
+
 
         elif mode == "docker":
             from docker import DockerClient
@@ -168,7 +213,8 @@ class CLIRunCommand(AbstractCLICommand):
             print('docker_conf:', docker_conf)
 
             docker_machine = DockerMachine(docker_client, project, docker_conf=docker_conf)
-            docker_machine.execute(parsed.remote_command, relative_workdir, shell=True, use_gpus=True, x_forward=parsed.x_forward)
+            docker_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
+                                   shell=True, use_gpus=True, x_forward=parsed.x_forward, env=env)
 
         elif mode == "slurm":
             from tel.config import SlurmConfig
@@ -176,11 +222,30 @@ class CLIRunCommand(AbstractCLICommand):
 
             # TODO: Also parse from slurm config options (aside from default)
             # Parse slurm configuration
-            slurm_conf = SlurmConfig(**machine_conf.get('slurm'))
+            if parsed.conf:
+                sconf = config['slurm-configs'].get(parsed.conf)
+                if sconf is None:
+                    raise KeyError(f'configuration: {parsed.con} cannot be found in "slurm-configs".')
+            else:
+                sconf = machine_conf.get('slurm')
+
+            slurm_conf = SlurmConfig(**sconf)
             print('slurm_conf', slurm_conf)
 
             slurm_machine = SlurmMachine(ssh_client, project, slurm_conf)
-            slurm_machine.execute(parsed.remote_command, relative_workdir, interactive=not parsed.disown, num_sequence=parsed.num_sequence)
+
+            if parsed.sweep:
+                assert parsed.disown, "You must set -d option to use sweep functionality."
+                begin, end = [int(val) for val in parsed.sweep.split('-')]
+                assert begin < end
+
+                for sweep_idx in range(begin, end + 1):
+                    env.update({'TEL_RUN_SWEEP_IDX': sweep_idx})
+                    slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
+                                          interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env)
+            else:
+                slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
+                                    interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env)
 
         elif mode == "singularity":
             raise NotImplementedError()
