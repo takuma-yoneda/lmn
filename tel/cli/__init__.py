@@ -31,6 +31,12 @@ class AbstractCLICommand(ABC):
             help="specify docker image"
         )
         parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            default=False,
+            help="dry run"
+        )
+        parser.add_argument(
             "-o",
             "--outdir",
             default=None,

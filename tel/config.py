@@ -93,7 +93,7 @@ class SlurmConfig:
     """Let's keep it minimal. Conceptually it's better to store SlurmConfig here,
     but that would make it harder to read.
     """
-    def __init__(self, partition, constraint, cpus_per_task, time,  output=None, dependency=None, exclude=None, **kwargs) -> None:
+    def __init__(self, partition='cpu', constraint=None, cpus_per_task=1, time=None,  output=None, error=None, dependency=None, exclude=None, **kwargs) -> None:
         self.partition = partition
         self.constraint = constraint
         self.exclude = exclude
@@ -101,6 +101,7 @@ class SlurmConfig:
         self.time = time
         self.dependency = dependency
         self.output = output
+        self.error = error
 
 
 class SingularityConfig:

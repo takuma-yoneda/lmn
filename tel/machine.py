@@ -44,23 +44,29 @@ class SSHClient:
     def uri(self, path):
         return f'{self.remote_conf.base_uri}:{path}'
 
-    def run(self, cmd, directory='$HOME', disown=False, hide=False, env=None, pty=False):
+    def run(self, cmd, directory='$HOME', disown=False, hide=False, env=None, pty=False, dry_run=False):
         # TODO: Check if $HOME would work or not!!
         env = {} if env is None else env
-        with self.conn.cd(directory):
-            # promise = self.conn.run(cmd, asynchronous=True)
-            if disown:
-                # NOTE: asynchronous=True --> disown=True
-                # asynchronous=True returns a Promise to which you can attach and listen to stdio.
-                # disown=True completely disowns the process.
-                self.conn.run(cmd, disown=True, hide=hide, env=env, pty=pty)
-                return
 
-            # NOTE: if you use asynchronous=True, stdout/stderr does not show up
-            # when you use it on slurm. I have no idea why, tho.
-            print('ssh client env', env)
-            result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
-        return result
+        if dry_run:
+            print('--- dry run ---')
+            print('cmd:', cmd)
+            print(locals())
+        else:
+            with self.conn.cd(directory):
+                # promise = self.conn.run(cmd, asynchronous=True)
+                if disown:
+                    # NOTE: asynchronous=True --> disown=True
+                    # asynchronous=True returns a Promise to which you can attach and listen to stdio.
+                    # disown=True completely disowns the process.
+                    self.conn.run(cmd, disown=True, hide=hide, env=env, pty=pty)
+                    return
+
+                # NOTE: if you use asynchronous=True, stdout/stderr does not show up
+                # when you use it on slurm. I have no idea why, tho.
+                print('ssh client env', env)
+                result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
+            return result
 
     def port_forward(self):
         raise NotImplementedError
@@ -74,7 +80,7 @@ class SSHMachine:
         self.client = client
         self.project = project
 
-    def execute(self, cmd, relative_workdir, startup=None, disown=False, use_gpus=True, x_forward=False, env=None) -> None:
+    def execute(self, cmd, relative_workdir, startup=None, disown=False, use_gpus=True, x_forward=False, env=None, dry_run=False) -> None:
         env = {} if env is None else env
         if isinstance(cmd, list):
             cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
@@ -89,7 +95,7 @@ class SSHMachine:
         telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
         env.update(telenv)
         return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                               disown=disown, env=env)
+                               disown=disown, env=env, dry_run=dry_run)
 
 
 class SlurmMachine:
@@ -103,7 +109,8 @@ class SlurmMachine:
         self.project = project
         self.slurm_conf = slurm_conf
 
-    def execute(self, cmd, relative_workdir, startup=None, interactive=False, num_sequence=1, env=None, job_name=None) -> None:
+    def execute(self, cmd, relative_workdir, startup=None, interactive=False, num_sequence=1,
+                env=None, job_name=None, shell='bash', dry_run=False) -> None:
         # TODO: I should notice that SSHMachine.execute, SlurmMachin.execute, and DockerMachine.execute don't really share arguments.
         # Should treat them as separate classes.
         from simple_slurm_command import SlurmCommand
@@ -135,7 +142,9 @@ class SlurmMachine:
                                      exclude=s.exclude,
                                      constraint=s.constraint,
                                      dependency=s.dependency,
-                                     output=s.output)
+                                     output=s.output,
+                                     error=s.error
+                                     )
 
         if interactive and (s.output is not None):
             # User may expect stdout shown on the console.
@@ -148,21 +157,21 @@ class SlurmMachine:
             cmd = f'{startup} && {cmd}'
 
         if interactive:
-            cmd = f'bash -i -c \'{cmd}\''
-            cmd = slurm_command.srun(cmd)
+            cmd = f'{shell} -i -c \'{cmd}\''
+            cmd = slurm_command.srun(cmd, pty=shell)
 
             print('srun mode:\n', cmd)
             print('cd to', self.project.remote_rootdir / relative_workdir)
             return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                                   disown=False, env=env)
+                                   disown=False, env=env, pty=True, dry_run=dry_run)
         else:
-            cmd = slurm_command.sbatch(cmd, shell='/bin/bash')
+            cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {shell}')
             print('sbatch mode:\n', cmd)
             print('cd to', self.project.remote_rootdir / relative_workdir)
 
             cmd = '\n'.join([cmd] * num_sequence)
             self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                            disown=False, env=env)
+                            disown=False, env=env, dry_run=dry_run)
 
 
 class DockerMachine:

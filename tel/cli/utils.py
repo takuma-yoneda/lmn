@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import subprocess
 
-def rsync(source_dir, target_dir, options='', exclude=None):
+def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False):
     import shutil
     exclude = [] if exclude is None else exclude
     # make sure rsync is installed
@@ -16,14 +16,19 @@ def rsync(source_dir, target_dir, options='', exclude=None):
 
     cmd = f"rsync --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
     print('running command', cmd)
-    run_cmd(cmd, shell=True)
+    run_cmd(cmd, shell=True, dry_run=dry_run)
     print("Sync finished!")
 
 
-def run_cmd(cmd, get_output=False, shell=False):
+
+def run_cmd(cmd, get_output=False, shell=False, dry_run=False):
 
     if shell and isinstance(cmd, (list, tuple)):
         cmd = " ".join([str(s) for s in cmd])
+
+    if dry_run:
+        print('dry_run:', cmd)
+        return
 
     if get_output:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=shell)

@@ -165,7 +165,8 @@ class CLIRunCommand(AbstractCLICommand):
             exclude.extend(project_conf['rsync'].get('exclude', []))
 
         rsync_options = f"--rsync-path='mkdir -p {project.remote_rootdir} && mkdir -p {project.remote_outdir} && rsync'"
-        rsync(source_dir=project.root_dir, target_dir=ssh_client.uri(project.remote_rootdir), options=rsync_options, exclude=exclude)
+        rsync(source_dir=project.root_dir, target_dir=ssh_client.uri(project.remote_rootdir), options=rsync_options,
+              exclude=exclude, dry_run=parsed.dry_run)
 
 
         # TODO: Clean it up later!!
@@ -184,7 +185,7 @@ class CLIRunCommand(AbstractCLICommand):
             from tel.machine import SSHMachine
             ssh_machine = SSHMachine(ssh_client, project)
             ssh_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
-                                         disown=parsed.disown, x_forward=parsed.x_forward, env=env)
+                                         disown=parsed.disown, x_forward=parsed.x_forward, env=env, dry_run=parsed.dry_run)
 
 
         elif mode == "docker":
@@ -193,6 +194,9 @@ class CLIRunCommand(AbstractCLICommand):
             from tel.machine import DockerMachine
             base_url = "ssh://" + remote_conf.base_uri
             docker_client = DockerClient(base_url=base_url, use_ssh_client=True)
+
+            if parsed.dry_run:
+                raise ValueError('dry run is not yet supported for Docker mode')
 
 
             # TODO: This looks horrible. Clean up.
@@ -239,13 +243,13 @@ class CLIRunCommand(AbstractCLICommand):
                 begin, end = [int(val) for val in parsed.sweep.split('-')]
                 assert begin < end
 
-                for sweep_idx in range(begin, end + 1):
+                for sweep_idx in range(begin, end):
                     env.update({'TEL_RUN_SWEEP_IDX': sweep_idx})
                     slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
-                                          interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env)
+                                          interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run)
             else:
                 slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
-                                    interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env)
+                                      interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run)
 
         elif mode == "singularity":
             raise NotImplementedError()
@@ -262,7 +266,7 @@ class CLIRunCommand(AbstractCLICommand):
             num_output_files = int(result.stdout)
             print(f'{num_output_files} files are in the output directory')
             if num_output_files:
-                rsync(source_dir=ssh_client.uri(project.remote_outdir), target_dir=project.out_dir)
+                rsync(source_dir=ssh_client.uri(project.remote_outdir), target_dir=project.out_dir, dry_run=parsed.dry_run)
 
 
 

@@ -7,12 +7,9 @@ import pathlib
 
 import tel
 from tel import __version__
-from tel.config import DockerContainerConfig, SlurmConfig
 from tel.helpers import find_project_root
-from tel.machine import SSHMachine, DockerMachine, SlurmMachine
 
 from tel.cli.commands.run import CLIRunCommand
-from simple_slurm_command import SlurmCommand
 
 _supported_commands = {
     'run': CLIRunCommand
