@@ -148,7 +148,7 @@ class SlurmMachine:
 
         if interactive and (s.output is not None):
             # User may expect stdout shown on the console.
-            print('--output argument for Slurm is set. stdout/stderr will not show up in the console.')
+            print('--output/--error argument for Slurm is ignored in interactive mode.')
 
         telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
         env.update(telenv)
@@ -176,21 +176,6 @@ class SlurmMachine:
 
 class DockerMachine:
     """A class to execute any code for a specific project.
-
-    DEPRECATED: Use SSHMachine with project.docker config.
-
-    You may wonder why project is fed to __init__ rather than to execute.
-    This is because I have an intuition that this would allow us to use polymorphism more effectively.
-    Conceptually, having a machine (DockerMachine) and project as a separate entity and
-    feed them to a 'runner' may make sense, however, that will necessiate to use if statement
-    to switch execution behavior (why? for example, docker-machine requires to use project.docker_image, while ssh-machine does not)
-    Alright, then why not just feed project to DockerMachine.execute?
-    First of all, as a premise, let's agree that "what docker image to use" should be defined in a 'project'.
-    Then, the responsibility of DockerMahchine.execute() is 1. instantiate docker-client (this requires docker-image specification) and 2. actually run docker.
-    If you code like that, what is the point of making an entire class for that? That can be done in a single function.
-    Also there's no portability. When you instantiate docker_machine and try to execute another command, you go through the gigantic DockerMachine.execute again,
-    and there's pretty much no resources that is reused.
-    I believe at this point you understand the point of feeding project to __init__. Though, I accept the argument if this class should be called "Machine".
     """
     def __init__(self, docker_client: DockerClient, project: Project, docker_conf: DockerContainerConfig) -> None:
         self.client = docker_client
