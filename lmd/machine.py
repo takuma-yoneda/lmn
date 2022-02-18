@@ -4,8 +4,8 @@ import os
 from os.path import join as pjoin
 from typing import Optional, Union
 from docker import DockerClient
-from tel.config import DockerContainerConfig
-from tel.project import Project
+from lmd.config import DockerContainerConfig
+from lmd.project import Project
 
 import fabric
 import invoke
@@ -92,8 +92,8 @@ class SSHMachine:
 
         print('ssh run with command:', cmd)
         print('cd to', self.project.remote_rootdir / relative_workdir)
-        telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
-        env.update(telenv)
+        lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir}
+        env.update(lmdenv)
         return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
                                disown=disown, env=env, dry_run=dry_run)
 
@@ -134,7 +134,7 @@ class SlurmMachine:
             import random
             proj_name_maxlen = 15
             rand_num = random.randint(0, 100)
-            job_name = f'tel-{self.project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
+            job_name = f'lmd-{self.project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
         slurm_command = SlurmCommand(cpus_per_task=s.cpus_per_task,
                                      job_name=job_name,
                                      partition=s.partition,
@@ -150,8 +150,8 @@ class SlurmMachine:
             # User may expect stdout shown on the console.
             print('--output/--error argument for Slurm is ignored in interactive mode.')
 
-        telenv = {'TEL_ROOT_DIR': self.project.remote_rootdir, 'TEL_OUTPUT_DIR': self.project.remote_outdir}
-        env.update(telenv)
+        lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir}
+        env.update(lmdenv)
 
         if startup:
             cmd = f'{startup} && {cmd}'
@@ -211,7 +211,7 @@ class DockerMachine:
         container_outdir = pjoin(DOCKER_OUTDIR)
         self.docker_conf.mounts += [Mount(target=container_workdir, source=self.project.remote_rootdir, type='bind'),
                                         Mount(target=container_outdir, source=self.project.remote_outdir, type='bind')]
-        self.docker_conf.environment.update({'TEL_PROJECT_ROOT': container_workdir, 'TEL_OUTPUT_ROOT': container_outdir})
+        self.docker_conf.environment.update({'LMD_PROJECT_ROOT': container_workdir, 'LMD_OUTPUT_ROOT': container_outdir})
         self.docker_conf.environment.update(env)
         print('mounts', self.docker_conf.mounts)
         print('docker_conf', self.docker_conf)

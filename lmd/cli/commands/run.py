@@ -2,7 +2,7 @@
 
 import argparse
 import pathlib
-from tel.cli import AbstractCLICommand
+from lmd.cli import AbstractCLICommand
 from typing import Optional, List
 
 Arguments = List[str]
@@ -90,7 +90,7 @@ class CLIRunCommand(AbstractCLICommand):
             "--sweep",
             action="store",
             type=str,
-            help="specify sweep range (e.g., --sweep 1-255) this is reflected to envvar $TEL_RUN_SWEEP_IDX"
+            help="specify sweep range (e.g., --sweep 1-255) this is reflected to envvar $LMD_RUN_SWEEP_IDX"
                  "Temporarily only available for slurm mode."
         )
         # TEMP:
@@ -118,11 +118,11 @@ class CLIRunCommand(AbstractCLICommand):
         2. run rsync(project.root_dir, project.remote_rootdir)
         3. run machine.execute(parsed.remote_command)
         """
-        from tel.cli.utils import rsync
+        from lmd.cli.utils import rsync
 
-        # Read from tel config file and reflect it
+        # Read from lmd config file and reflect it
         # TODO: clean this up
-        from tel.machine import RemoteConfig
+        from lmd.machine import RemoteConfig
         if parsed.machine not in config['machines']:
             raise KeyError(
                 f'Machine "{parsed.machine}" not found in the configuration. '
@@ -136,7 +136,7 @@ class CLIRunCommand(AbstractCLICommand):
 
 
         from os.path import join as pjoin
-        from tel.project import Project
+        from lmd.project import Project
         project = Project(name=parsed.name,
                           root_dir=parsed.workdir,
                           remote_dir=pjoin(machine_conf['root_dir'], parsed.name) if 'root_dir' in machine_conf else None,
@@ -150,7 +150,7 @@ class CLIRunCommand(AbstractCLICommand):
         # 3. Use ssh mode
         mode = parsed.mode if parsed.mode else machine_conf.get('default_mode', 'ssh')
 
-        from tel.machine import SSHClient
+        from lmd.machine import SSHClient
         ssh_client = SSHClient(remote_conf)
 
         # TODO: Hmmm ugly... let's fix it later
@@ -182,7 +182,7 @@ class CLIRunCommand(AbstractCLICommand):
             env.update(machine_envs)
 
         if mode == "ssh":
-            from tel.machine import SSHMachine
+            from lmd.machine import SSHMachine
             ssh_machine = SSHMachine(ssh_client, project)
             ssh_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
                                          disown=parsed.disown, x_forward=parsed.x_forward, env=env, dry_run=parsed.dry_run)
@@ -190,8 +190,8 @@ class CLIRunCommand(AbstractCLICommand):
 
         elif mode == "docker":
             from docker import DockerClient
-            from tel.config import DockerContainerConfig
-            from tel.machine import DockerMachine
+            from lmd.config import DockerContainerConfig
+            from lmd.machine import DockerMachine
             base_url = "ssh://" + remote_conf.base_uri
             docker_client = DockerClient(base_url=base_url, use_ssh_client=True)
 
@@ -221,8 +221,8 @@ class CLIRunCommand(AbstractCLICommand):
                                    shell=True, use_gpus=True, x_forward=parsed.x_forward, env=env)
 
         elif mode == "slurm":
-            from tel.config import SlurmConfig
-            from tel.machine import SlurmMachine
+            from lmd.config import SlurmConfig
+            from lmd.machine import SlurmMachine
 
             # TODO: Also parse from slurm config options (aside from default)
             # Parse slurm configuration
@@ -244,7 +244,7 @@ class CLIRunCommand(AbstractCLICommand):
                 assert begin < end
 
                 for sweep_idx in range(begin, end):
-                    env.update({'TEL_RUN_SWEEP_IDX': sweep_idx})
+                    env.update({'LMD_RUN_SWEEP_IDX': sweep_idx})
                     slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
                                           interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run)
             else:
@@ -260,7 +260,7 @@ class CLIRunCommand(AbstractCLICommand):
 
         # Rsync remote outdir with the local outdir.
         if project.out_dir:
-            from tel.cli.utils import rsync
+            from lmd.cli.utils import rsync
             # Check if there's any output file (the first line is always 'total [num-files]')
             result = ssh_client.run(f'ls -l {project.remote_outdir} | grep -v "^total" | wc -l', hide=True)
             num_output_files = int(result.stdout)

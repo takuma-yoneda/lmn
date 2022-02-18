@@ -5,7 +5,7 @@ import os
 from abc import abstractmethod, ABC
 from typing import Optional, Type
 
-from tel.types import Arguments
+from lmd.types import Arguments
 
 
 class AbstractCLICommand(ABC):
@@ -60,7 +60,7 @@ class AbstractCLICommand(ABC):
     def get_parser(cls, args: Arguments) -> argparse.ArgumentParser:
         common_parser = cls.common_parser()
         command_parser = cls.parser(common_parser, args)
-        command_parser.prog = f'tel {cls.KEY}'
+        command_parser.prog = f'lmd {cls.KEY}'
         return command_parser
 
     @staticmethod
@@ -75,7 +75,7 @@ class AbstractCLICommand(ABC):
         pass
 
 
-class TELCLI:
+class LMDCLI:
 
     @staticmethod
     def parse_arguments(command: Type[AbstractCLICommand], args: Arguments) -> argparse.Namespace:
@@ -92,6 +92,6 @@ class TELCLI:
 
 __all__ = [
     "AbstractCLICommand",
-    "TELCLI",
+    "LMDCLI",
     # "cpklogger"
 ]

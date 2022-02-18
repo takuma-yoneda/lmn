@@ -3,11 +3,11 @@ import pathlib
 from setuptools import find_packages, setup
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
-exec((BASE_DIR / "tel/_version.py").read_text())
+exec((BASE_DIR / "lmd/_version.py").read_text())
 
 
 setup(
-    name="tel",
+    name="lmd",
     version=__version__,  # type: ignore[name-defined]  # NOQA: F821
     packages=find_packages(),
     description=(
@@ -17,7 +17,7 @@ setup(
     long_description_content_type="text/markdown",
     author="Takuma Yoneda",
     author_email="takuma.ynd@gmail.com",
-    url="https://github.com/takuma-yoneda/tel",
+    url="https://github.com/takuma-yoneda/lmd",
     license="MIT License",
     classifiers=[
         "Programming Language :: Python :: 3.6",
@@ -41,6 +41,6 @@ setup(
     #     ],
     # },
     # package_data={"pysen": ["py.typed"]},
-    package_dir={'tel': 'tel'},
-    entry_points={"console_scripts": ["tel=tel.cli.main:run"]},
+    package_dir={'lmd': 'lmd'},
+    entry_points={"console_scripts": ["lmd=lmd.cli.main:run"]},
 )

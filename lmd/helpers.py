@@ -41,12 +41,12 @@ def merge_nested_dict(a, b, path=None, conflict='use_b'):
 
 
 def parse_config(project_root):
-    """ Parse tel config (json file)
+    """ Parse lmd config (json file)
 
     It looks for config file in this order:
-    1. incrementally goes up in the directory tree (up to TEL_MAX_DEPTH) and find .tel
-    2. $HOME/.tel.config
-    3. $HOME/.config/tel
+    1. incrementally goes up in the directory tree (up to LMD_MAX_DEPTH) and find .lmd
+    2. $HOME/.lmd.config
+    3. $HOME/.config/lmd
     """
     import json
     from os.path import expandvars, isfile
@@ -58,7 +58,7 @@ def parse_config(project_root):
         return {}
 
     # TODO: Hmmm... a better way to write this config search algorithm?
-    global_conf_paths = ['${HOME}/.tel.config', '${HOME}/.config/tel']
+    global_conf_paths = ['${HOME}/.lmd.config', '${HOME}/.config/lmd']
     for path in global_conf_paths:
         path = expandvars(path)
         if isfile(path):
@@ -66,7 +66,7 @@ def parse_config(project_root):
     with open(path, 'r') as f:
         global_conf = json.load(f)
 
-    local_conf = _maybe_load(f'{project_root}/.tel.config')
+    local_conf = _maybe_load(f'{project_root}/.lmd.config')
 
     global_conf = remove_recursively(global_conf, key='__help')
     local_conf = remove_recursively(local_conf, key='__help')
@@ -89,13 +89,13 @@ def remove_recursively(config_dict, key='__help'):
 def find_project_root():
     """Find a project root (which is rsync-ed with the remote server).
 
-    It first goes up in the directory tree to find ".git" or ".tel" file.
+    It first goes up in the directory tree to find ".git" or ".lmd" file.
     If not found, print warning and just use the current directory
     """
     def is_proj_root(directory: Path):
         if (directory / '.git').is_dir():
             return True
-        if (directory / '.tel').is_file():
+        if (directory / '.lmd').is_file():
             return True
         return False
 
@@ -107,7 +107,7 @@ def find_project_root():
         if is_proj_root(directory):
             return directory
 
-    print('.git directory or .tel file not found in the ancestor directories.\n'
+    print('.git directory or .lmd file not found in the ancestor directories.\n'
           'Setting project root to current directory')
 
     assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."

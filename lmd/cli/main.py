@@ -5,11 +5,11 @@ import sys
 import argparse
 import pathlib
 
-import tel
-from tel import __version__
-from tel.helpers import find_project_root
+import lmd
+from lmd import __version__
+from lmd.helpers import find_project_root
 
-from tel.cli.commands.run import CLIRunCommand
+from lmd.cli.commands.run import CLIRunCommand
 
 _supported_commands = {
     'run': CLIRunCommand
@@ -31,7 +31,7 @@ def run():
     - parse args and pass them to a proper subcommand
     """
 
-    print(f"tel - Remote code execution for ML researchers - v{tel.__version__}")
+    print(f"lmd - Remote code execution for ML researchers - v{lmd.__version__}")
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         'command',
@@ -60,9 +60,9 @@ def run():
     print('relative working dir:', relative_workdir)  # cwd.relative_to(project_root)
     parsed.name = parsed.workdir.stem
 
-    # Read from tel config file and reflect it
+    # Read from lmd config file and reflect it
     # TODO: clean this up
-    from tel.helpers import parse_config
+    from lmd.helpers import parse_config
     config = parse_config(parsed.workdir)
 
     command.execute(config, parsed, relative_workdir=relative_workdir)

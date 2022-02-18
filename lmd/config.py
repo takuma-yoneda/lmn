@@ -59,7 +59,7 @@ class DockerContainerConfig:
         # something like: /private/tmp/com.apple.launchd.jY5AhC1lFM/org.xquartz:0
         # which doesn't work (??)
         if 'xquartz' in os.environ.get('DISPLAY', ''):
-            from tel.cli.utils import run_cmd
+            from lmd.cli.utils import run_cmd
             ip = run_cmd('ifconfig en0 | grep inet | awk \'$1=="inet" {print $2}\'', get_output=True, shell=True)
             display = f'{ip}:0'
         else:
