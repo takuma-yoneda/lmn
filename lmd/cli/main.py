@@ -10,9 +10,14 @@ from lmd import __version__
 from lmd.helpers import find_project_root
 
 from lmd.cli.commands.run import CLIRunCommand
+from lmd.cli.commands.sync import CLISyncCommand
+from lmd.cli.commands.status import CLIStatusCommand
+from lmd import logger
 
 _supported_commands = {
-    'run': CLIRunCommand
+    'run': CLIRunCommand,
+    'sync': CLISyncCommand,
+    'status': CLIStatusCommand,
     # 'create': CLICreateCommand,
     # 'info': CLIInfoCommand,
     # 'build': CLIBuildCommand,

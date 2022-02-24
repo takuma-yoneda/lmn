@@ -247,7 +247,7 @@ class CLIRunCommand(AbstractCLICommand):
                 for sweep_idx in range(begin, end):
                     env.update({'LMD_RUN_SWEEP_IDX': sweep_idx})
                     slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
-                                          interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run)
+                                          interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run, sweeping=True)
             else:
                 slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
                                       interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run)

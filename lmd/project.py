@@ -25,5 +25,8 @@ class Project:
         os.makedirs(self.root_dir, exist_ok=True)
         os.makedirs(self.out_dir, exist_ok=True)
 
+    def get_dict(self):
+        return {key: val for key, val in vars(self).items() if not (key.startswith('__') or callable(val))}
+
     def __repr__(self):
         return repr(f'<Project {self.name}>')

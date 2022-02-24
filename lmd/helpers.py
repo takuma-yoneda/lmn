@@ -113,3 +113,36 @@ def find_project_root():
 
     assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."
     return current_dir
+
+
+
+from datetime import datetime
+def get_timestamp() -> str:
+    return datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S.%f')
+
+def read_timestamp(time_str: str) -> datetime:
+    return datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S.%f')
+
+
+def wrap_shebang(command, shell='bash'):
+    return f"#!/usr/bin/env {shell}\n{command}"
+
+sacct_cmd = "sacct --starttime $(date -d '40 hours ago' +%D-%R) --endtime now --format JobID,JobName%-100,NodeList,Elapsed,State,ExitCode,MaxRSS --parsable2"
+
+
+def parse_sacct(sacct_output):
+    lines = sacct_output.strip().split('\n')
+    keys = lines[0].split('|')
+    entries = [{key: entry for key, entry in zip(keys, line.split('|'))} for line in lines[1:]]
+    return entries
+
+def posixpath2str(obj):
+    import pathlib
+    if isinstance(obj, list):
+        return [posixpath2str(e) for e in obj]
+    elif isinstance(obj, dict):
+        return {key: posixpath2str(val) for key, val in obj.items()}
+    elif isinstance(obj, pathlib.Path):
+        return str(obj)
+    else:
+        return obj

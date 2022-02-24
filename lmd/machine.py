@@ -2,9 +2,11 @@
 from abc import ABC
 import os
 from os.path import join as pjoin
+from os.path import expandvars
 from typing import Optional, Union
 from docker import DockerClient
 from lmd.config import DockerContainerConfig
+from lmd.helpers import posixpath2str
 from lmd.project import Project
 
 import fabric
@@ -38,6 +40,9 @@ class RemoteConfig:
         conn = Connection(host=self.host, config=config, inline_ssh_env=True)
         return conn
 
+    def get_dict(self):
+        return {key: val for key, val in vars(self).items() if not (key.startswith('__') or callable(val))}
+
 class SSHClient:
     def __init__(self, remote_conf: RemoteConfig) -> None:
         self.remote_conf = remote_conf
@@ -49,6 +54,10 @@ class SSHClient:
     def run(self, cmd, directory='$HOME', disown=False, hide=False, env=None, pty=False, dry_run=False):
         # TODO: Check if $HOME would work or not!!
         env = {} if env is None else env
+
+        # Perform shell escaping for envvars
+        import shlex
+        env = {key: shlex.quote(str(val)) for key, val in env.items()}
 
         if dry_run:
             logger.info('--- dry run ---')
@@ -69,6 +78,9 @@ class SSHClient:
                 logger.info(f'ssh client env: {env}')
                 result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
             return result
+
+    def put(self, file_like, target_path=None):
+        self.conn.put(file_like, str(target_path))
 
     def port_forward(self):
         raise NotImplementedError
@@ -97,7 +109,7 @@ class SSHMachine:
         lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir}
         env.update(lmdenv)
         return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                               disown=disown, env=env, dry_run=dry_run)
+                               disown=disown, env=env, dry_run=dry_run, pty=True)
 
 
 class SlurmMachine:
@@ -112,7 +124,7 @@ class SlurmMachine:
         self.slurm_conf = slurm_conf
 
     def execute(self, cmd, relative_workdir, startup=None, interactive=False, num_sequence=1,
-                env=None, job_name=None, shell='bash', dry_run=False) -> None:
+                env=None, job_name=None, shell='bash', dry_run=False, sweeping=False) -> None:
         # TODO: I should notice that SSHMachine.execute, SlurmMachin.execute, and DockerMachine.execute don't really share arguments.
         # Should treat them as separate classes.
         from simple_slurm_command import SlurmCommand
@@ -152,28 +164,87 @@ class SlurmMachine:
             # User may expect stdout shown on the console.
             logger.info('--output/--error argument for Slurm is ignored in interactive mode.')
 
-        lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir}
+        # Hmmmm, Fabric seems to have an issue to handle envvar that contains spaces...
+        # This is the issue of using "inline_ssh_env" that essentially sets envvars by putting bunch of export KEY=VAL before running shells.
+        # The documentation clearly says developers need to handle shell escaping for non-trivial values.
+        lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir, 'LMD_USER_COMMAND': cmd}
         env.update(lmdenv)
 
         if startup:
             cmd = f'{startup} && {cmd}'
 
         if interactive:
-            cmd = f'{shell} -i -c \'{cmd}\''
-            cmd = slurm_command.srun(cmd, pty=shell)
+            # cmd = f'{shell} -i -c \'{cmd}\''
+            # Create a temp bash file and put it on the remote server.
+            workdir = self.project.remote_rootdir / relative_workdir
+            logger.info('exec file: ' + f"#!/usr/bin/env {shell}\n{cmd}\n{shell}")
+            from io import StringIO
+            file_obj = StringIO(f"#!/usr/bin/env {shell}\n{cmd}\n{shell}")
+            self.client.put(file_obj, workdir / '.srun-script.sh')
+            cmd = slurm_command.srun('.srun-script.sh', pty=shell)
 
-            print('srun mode:\n', cmd)
-            print('cd to', self.project.remote_rootdir / relative_workdir)
-            return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
+            logger.info(f'srun mode:\n{cmd}')
+            logger.info(f'cd to {workdir}')
+            return self.client.run(cmd, directory=workdir,
                                    disown=False, env=env, pty=True, dry_run=dry_run)
         else:
             cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {shell}')
-            print('sbatch mode:\n', cmd)
-            print('cd to', self.project.remote_rootdir / relative_workdir)
+            logger.info(f'sbatch mode:\n{cmd}')
+            logger.info(f'cd to {self.project.remote_rootdir / relative_workdir}')
 
             cmd = '\n'.join([cmd] * num_sequence)
-            self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
-                            disown=False, env=env, dry_run=dry_run)
+            result = self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
+                                     disown=False, env=env, dry_run=dry_run)
+            if result.stderr:
+                logger.warn('sbatch job submission failed:', result.stderr)
+            jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833
+            logger.debug(f'jobid {jobid}')
+
+
+            if not dry_run:
+                # TODO: store {jobid: (job_name, cmd, env, directory)} dictionary!
+                # Maybe should check if there's other processes with same name (i.e., sequential jobs) are running?
+                # TODO: Create an interface for the submitted jobs. It should also be used by "status" command.
+                import json
+                from .helpers import get_timestamp, read_timestamp
+                from datetime import datetime
+                now = datetime.now()
+
+                # New entry
+                new_entry = {'remote': self.client.remote_conf.get_dict(),
+                             'timestamp': get_timestamp(),
+                             'command': cmd,
+                             'envvar': env,
+                             'project': self.project.get_dict(),
+                             'relative_workdir': relative_workdir,
+                             'shell': shell,
+                             'jobid': jobid,
+                             'sweeping': sweeping}
+
+                # Prepare jsonification
+                from lmd.helpers import posixpath2str
+                new_entry = posixpath2str(new_entry)
+
+                launch_logfile = expandvars('$HOME/.lmd/launched.json')
+                if os.path.isfile(launch_logfile):
+                    with open(launch_logfile, 'r') as f:
+                        data = json.load(f)
+                else:
+                    data = []
+
+                # file mode should be w+? a? a+?? Look at this: https://stackoverflow.com/a/58925279/7057866
+                with open(launch_logfile, 'w') as f:
+                    new_entries = [new_entry]
+
+                    # Remove whatever that is older than 30 hours
+                    for entry in data:
+                        dt = (now - read_timestamp(entry.get('timestamp'))).seconds
+                        if dt > 60 * 60 * 30:
+                            continue
+                        new_entries.append(entry)
+
+                    # Save new entries
+                    json.dump(new_entries, f)
 
 
 class DockerMachine:
