@@ -44,7 +44,7 @@ def run():
     # ---
     # parse `command`
     parsed, remaining = parser.parse_known_args()
-    print(f'main.py -- parsed: {parsed}\tremaining:{remaining}')
+
     # get command
     command = _supported_commands[parsed.command]
     # let the command parse its arguments
@@ -52,12 +52,16 @@ def run():
     parsed = cmd_parser.parse_args(remaining)
     # sanitize workdir
 
+    if parsed.verbose:
+        from logging import DEBUG
+        logger.setLevel(DEBUG)
+
     # TODO: find a correct project directory
     parsed.workdir = find_project_root()
     current_dir = pathlib.Path(os.getcwd()).resolve()
     relative_workdir = current_dir.relative_to(parsed.workdir)
-    print('Project root directory:', parsed.workdir)
-    print('relative working dir:', relative_workdir)  # cwd.relative_to(project_root)
+    logger.info('Project root directory: {parsed.workdir}')
+    logger.info('relative working dir: {relative_workdir}')  # cwd.relative_to(project_root)
     parsed.name = parsed.workdir.stem
 
     # Read from lmd config file and reflect it

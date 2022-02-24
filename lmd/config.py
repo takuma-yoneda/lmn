@@ -2,6 +2,7 @@
 import os
 from os.path import expandvars
 import docker
+from lmd import logger
 
 class DockerContainerConfig:
     def __init__(self, image, name, remove=True, network='host', ipc_mode='host', mounts=None,
@@ -68,7 +69,7 @@ class DockerContainerConfig:
         # TODO: In addition to this, there needs to be a X forwarding from the remote to local
         # paramiko should support that.
 
-        print('display', display)
+        logger.info(f'display: {display}')
         self.environment.update({
             'DISPLAY': display,
             'NVIDIA_VISIBLE_DEVICES': 'all',  # Only if you have nvidia gpus

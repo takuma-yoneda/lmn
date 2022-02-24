@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import subprocess
+from lmd import logger
 
 def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False):
     import shutil
@@ -8,17 +9,16 @@ def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False):
     if shutil.which("rsync") is None:
         raise RuntimeError("rsync binary is not found.")
     # ---
-    print(f"Syncing code...")
+    logger.info(f"Syncing code...")
     source_dir = str(source_dir).rstrip('/') + '/'
     target_dir = str(target_dir).rstrip('/') + '/'
 
     exclude_str = ' '.join(f'--exclude \'{ex}\'' for ex in exclude)
 
     cmd = f"rsync --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
-    print('running command', cmd)
+    logger.info(f'running command: {cmd}')
     run_cmd(cmd, shell=True, dry_run=dry_run)
-    print("Sync finished!")
-
+    logger.info("Sync finished!")
 
 
 def run_cmd(cmd, get_output=False, shell=False, dry_run=False):
@@ -27,7 +27,7 @@ def run_cmd(cmd, get_output=False, shell=False, dry_run=False):
         cmd = " ".join([str(s) for s in cmd])
 
     if dry_run:
-        print('dry_run:', cmd)
+        logger.info('dry_run:', cmd)
         return
 
     if get_output:
@@ -37,7 +37,7 @@ def run_cmd(cmd, get_output=False, shell=False, dry_run=False):
             msg = "The command {} returned exit code {}".format(cmd, proc.returncode)
             raise RuntimeError(msg)
         out = proc.stdout.read().decode("utf-8").rstrip()
-        print(out)
+        logger.info(out)
         return out
     else:
         res = subprocess.run(cmd, shell=shell)

@@ -10,6 +10,8 @@ from lmd.project import Project
 import fabric
 import invoke
 
+from lmd import logger
+
 DOCKER_WORKDIR = '/ws'
 DOCKER_OUTDIR = '/output'
 
@@ -49,9 +51,9 @@ class SSHClient:
         env = {} if env is None else env
 
         if dry_run:
-            print('--- dry run ---')
-            print('cmd:', cmd)
-            print(locals())
+            logger.info('--- dry run ---')
+            logger.info(f'cmd: {cmd}')
+            logger.debug(locals())
         else:
             with self.conn.cd(directory):
                 # promise = self.conn.run(cmd, asynchronous=True)
@@ -64,7 +66,7 @@ class SSHClient:
 
                 # NOTE: if you use asynchronous=True, stdout/stderr does not show up
                 # when you use it on slurm. I have no idea why, tho.
-                print('ssh client env', env)
+                logger.info(f'ssh client env: {env}')
                 result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
             return result
 
@@ -90,8 +92,8 @@ class SSHMachine:
         # cmd = f'bash -c \'{cmd}\''
         # cmd = f'bash -c \'{cmd}\''
 
-        print('ssh run with command:', cmd)
-        print('cd to', self.project.remote_rootdir / relative_workdir)
+        logger.info(f'ssh run with command: {cmd}')
+        logger.info('cd to {self.project.remote_rootdir / relative_workdir}')
         lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir}
         env.update(lmdenv)
         return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
@@ -123,7 +125,7 @@ class SlurmMachine:
             # Use sbatch and set dependency to singleton
             self.slurm_conf.dependency = 'singleton'
             if interactive:
-                print('WARN: num_sequence is set to {n_sequence} > 1. Force disabling interactive mode')
+                logger.warn('num_sequence is set to {n_sequence} > 1. Force disabling interactive mode')
                 interactive = False
 
         # Obtain slurm cli command
@@ -148,7 +150,7 @@ class SlurmMachine:
 
         if interactive and (s.output is not None):
             # User may expect stdout shown on the console.
-            print('--output/--error argument for Slurm is ignored in interactive mode.')
+            logger.info('--output/--error argument for Slurm is ignored in interactive mode.')
 
         lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir}
         env.update(lmdenv)
@@ -213,17 +215,17 @@ class DockerMachine:
                                         Mount(target=container_outdir, source=self.project.remote_outdir, type='bind')]
         self.docker_conf.environment.update({'LMD_PROJECT_ROOT': container_workdir, 'LMD_OUTPUT_ROOT': container_outdir})
         self.docker_conf.environment.update(env)
-        print('mounts', self.docker_conf.mounts)
-        print('docker_conf', self.docker_conf)
+        logger.info('mounts', self.docker_conf.mounts)
+        logger.info('docker_conf', self.docker_conf)
 
         if isinstance(cmd, list):
             cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
         if self.docker_conf.tty:
             startup = 'sleep 2' if startup is None else startup
             cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {container_outdir} \''
-        print('docker run with command:', cmd)
+        logger.info('docker run with command:', cmd)
 
-        print('container workdir:', str(container_workdir / relative_workdir))
+        logger.info('container workdir:', str(container_workdir / relative_workdir))
         # NOTE: Intentionally being super verbose to make arguments explicit.
         d = self.docker_conf
         container = self.client.containers.run(d.image,
@@ -240,15 +242,15 @@ class DockerMachine:
                                                working_dir=str(container_workdir / relative_workdir),
                                                # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
                                                )
-        print('container', container)
+        logger.info('container', container)
         if disown:
-            print('NOTE: disown is set to True. Output files will not be transported to your local directory.')
+            logger.warn('NOTE: disown is set to True. Output files will not be transported to your local directory.')
         else:
             # Block and listen to the stream from container
             stream = container.logs(stream=True, follow=True)
-            print('--- listening container stdout/stderr ---\n')
+            logger.info('--- listening container stdout/stderr ---\n')
             for char in stream:
-                print(char.decode('utf-8'), end='')
+                logger.info(char.decode('utf-8'), end='')
 
     def get_status(self, all=False):
         """List the status of containers associated to the project (it simply filters based on container name)

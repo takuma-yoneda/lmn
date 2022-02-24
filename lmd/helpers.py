@@ -92,6 +92,7 @@ def find_project_root():
     It first goes up in the directory tree to find ".git" or ".lmd" file.
     If not found, print warning and just use the current directory
     """
+    from lmd import logger
     def is_proj_root(directory: Path):
         if (directory / '.git').is_dir():
             return True
@@ -107,8 +108,8 @@ def find_project_root():
         if is_proj_root(directory):
             return directory
 
-    print('.git directory or .lmd file not found in the ancestor directories.\n'
-          'Setting project root to current directory')
+    logger.warn('.git directory or .lmd file not found in the ancestor directories.\n'
+                'Setting project root to current directory')
 
     assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."
     return current_dir

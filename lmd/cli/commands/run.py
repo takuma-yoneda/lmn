@@ -4,6 +4,7 @@ import argparse
 import pathlib
 from lmd.cli import AbstractCLICommand
 from typing import Optional, List
+from lmd import logger
 
 Arguments = List[str]
 RSYNC_DESTINATION_PATH = "/tmp/".rstrip('/')
@@ -141,7 +142,7 @@ class CLIRunCommand(AbstractCLICommand):
                           root_dir=parsed.workdir,
                           remote_dir=pjoin(machine_conf['root_dir'], parsed.name) if 'root_dir' in machine_conf else None,
                           out_dir=parsed.outdir)
-        print('project:', project)
+        logger.info('project: {project}')
 
 
         # NOTE: Order to check 'mode'
@@ -214,7 +215,7 @@ class CLIRunCommand(AbstractCLICommand):
                 raise RuntimeError("docker image cannot be parsed. Something may be wrong with your docker configuration?")
 
             docker_conf = DockerContainerConfig(image, f'{user}-{project.name}')
-            print('docker_conf:', docker_conf)
+            logger.info('docker_conf: {docker_conf}')
 
             docker_machine = DockerMachine(docker_client, project, docker_conf=docker_conf)
             docker_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
@@ -234,7 +235,7 @@ class CLIRunCommand(AbstractCLICommand):
                 sconf = machine_conf.get('slurm')
 
             slurm_conf = SlurmConfig(**sconf)
-            print('slurm_conf', slurm_conf)
+            logger.info(f'slurm_conf: {slurm_conf}')
 
             slurm_machine = SlurmMachine(ssh_client, project, slurm_conf)
 
@@ -264,7 +265,7 @@ class CLIRunCommand(AbstractCLICommand):
             # Check if there's any output file (the first line is always 'total [num-files]')
             result = ssh_client.run(f'ls -l {project.remote_outdir} | grep -v "^total" | wc -l', hide=True)
             num_output_files = int(result.stdout)
-            print(f'{num_output_files} files are in the output directory')
+            logger.info(f'{num_output_files} files are in the output directory')
             if num_output_files:
                 rsync(source_dir=ssh_client.uri(project.remote_outdir), target_dir=project.out_dir, dry_run=parsed.dry_run)
 
