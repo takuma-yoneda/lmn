@@ -44,12 +44,13 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.lmd.config', '${HOME
     """ Parse lmd config (json file)
 
     It looks for config file in this order:
-    1. incrementally goes up in the directory tree (up to LMD_MAX_DEPTH) and find .lmd
+    1. {project_root}/.lmd.config
     2. $HOME/.lmd.config
     3. $HOME/.config/lmd
     """
     import json
     from os.path import expandvars, isfile
+    from lmd import logger
 
     def _maybe_load(path):
         if isfile(path):
@@ -58,12 +59,19 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.lmd.config', '${HOME
         return {}
 
     # TODO: Hmmm... a better way to write this config search algorithm?
+    path_found = False
     for path in global_conf_paths:
         path = expandvars(path)
         if isfile(path):
+            path_found = True
             break
-    with open(path, 'r') as f:
-        global_conf = json.load(f)
+
+    if path_found:
+        with open(path, 'r') as f:
+            global_conf = json.load(f)
+    else:
+        logger.warn('LMD global config file cannot be located.')
+        global_conf = {}
 
     local_conf = _maybe_load(f'{project_root}/.lmd.config')
 

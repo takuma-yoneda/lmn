@@ -1,0 +1,73 @@
+{
+    "machines": {
+        "__help": "machine descriptions go here",
+        "birch": {
+            "default_mode": "docker",
+            "host": "birch.ttic.edu",
+            "user": "takuma",
+            "docker": {
+                "__help": "default docker configuration",
+                "name": "ubuntu:18.04"
+            }
+        },
+        "tticslurm": {
+            "default_mode": "slurm",
+            "host": "slurm.ttic.edu",
+            "user": "takuma",
+            "startup": ". ~/.bashrc",
+            "root_dir": "/share/data/ripl/takuma/lmd",
+            "slurm": {
+                "__help": "default slurm configuration",
+                "partition": "ripl-gpu",
+                "cpus_per_task": 1,
+                "time": "04:00:00",
+                "constraint": "highmem",
+                "output": "slurm-%j.out.log",
+                "error": "slurm-%j.error.log",
+                "exclude": "gpu-g1,gpu-g3,gpu-g21"
+            }
+        }
+    },
+    "docker-images": {
+        "__help": "docker image descriptions",
+        "mltools": {
+            "name": "takumaynd/mltools"
+        }
+    },
+    "slurm-configs": {
+        "__help": "custom slurm configurations",
+        "multi-cpus": {
+            "partition": "ripl-gpu",
+            "cpus_per_task": 3,
+            "time": "4:00:00",
+            "constraint": "highmem",
+            "output": "slurm-%j.out.log",
+            "error": "slurm-%j.error.log",
+            "exclude": "gpu-g1,gpu-g21"
+        },
+        "two-cpus": {
+            "partition": "ripl-gpu",
+            "cpus_per_task": 2,
+            "time": "4:00:00",
+            "constraint": "highmem",
+            "output": "slurm-%j.out.log",
+            "error": "slurm-%j.error.log",
+            "exclude": "gpu-g1,gpu-g3,gpu-g21"
+        },
+        "long": {
+            "partition": "contrib-gpu-long",
+            "cpus_per_task": 1,
+            "time": "95:00:00",
+            "constraint": "highmem",
+            "output": "slurm-%j.out.log",
+            "error": "slurm-%j.error.log",
+            "exclude": "gpu-g1,gpu-g3,gpu-g21"
+        },
+        "cpu": {
+            "partition": "cpu",
+            "time": "4:00:00",
+            "output": "slurm-%j.out.log",
+            "error": "slurm-%j.error.log"
+        }
+    }
+}
