@@ -24,17 +24,6 @@ class CLISyncCommand(AbstractCLICommand):
             type=str,
             help="Machine",
         )
-        parser.add_argument(
-            "-v",
-            "--mount",
-            default=False,
-            const=True,
-            action="store",
-            nargs="?",
-            type=str,
-            help="Whether to mount the current project into the container. "
-                 "Pass a comma-separated list of paths to mount multiple projects",
-        )
         return parser
 
     @staticmethod

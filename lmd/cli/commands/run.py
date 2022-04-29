@@ -34,17 +34,6 @@ class CLIRunCommand(AbstractCLICommand):
             help="What mode to run",
         )
         parser.add_argument(
-            "-v",
-            "--mount",
-            default=False,
-            const=True,
-            action="store",
-            nargs="?",
-            type=str,
-            help="Whether to mount the current project into the container. "
-                 "Pass a comma-separated list of paths to mount multiple projects",
-        )
-        parser.add_argument(
             "-d",
             "--disown",
             action="store_true",
@@ -164,6 +153,7 @@ class CLIRunCommand(AbstractCLICommand):
         if project_conf and 'rsync' in project_conf:
             exclude.extend(project_conf['rsync'].get('exclude', []))
 
+
         # rsync the source code
         rsync_options = f"--rsync-path='mkdir -p {project.remote_dir} && mkdir -p {project.remote_outdir} && mkdir -p {project.remote_mountdir} && rsync'"
         rsync(source_dir=project.local_dir, target_dir=ssh_client.uri(project.remote_dir), options=rsync_options,
@@ -187,6 +177,11 @@ class CLIRunCommand(AbstractCLICommand):
         machine_envs = machine_conf.get('environment')
         if machine_envs:
             env.update(machine_envs)
+
+
+        if parsed.x_forward:
+            raise NotImplementedError("X11 forwarding is not supported yet")
+
 
         if mode == "ssh":
             from lmd.machine import SSHMachine
