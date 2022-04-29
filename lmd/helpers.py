@@ -134,14 +134,22 @@ def read_timestamp(time_str: str) -> datetime:
 def wrap_shebang(command, shell='bash'):
     return f"#!/usr/bin/env {shell}\n{command}"
 
-sacct_cmd = "sacct --starttime $(date -d '40 hours ago' +%D-%R) --endtime now --format JobID,JobName%-100,NodeList,Elapsed,State,ExitCode,MaxRSS --parsable2"
+
+sacct_cmd = "sacct --starttime $(date -d '40 hours ago' +%D-%R) --endtime now --format JobID,JobName%-100,NodeList,Elapsed,State,ExitCode --parsable2"
 
 
 def parse_sacct(sacct_output):
     lines = sacct_output.strip().split('\n')
     keys = lines[0].split('|')
     entries = [{key: entry for key, entry in zip(keys, line.split('|'))} for line in lines[1:]]
+    # NOTE: For a batch job, sacct shows two entries for one job submission:
+    # {'JobID': '8231686', 'JobName': 'lmd-iti-coped-chief-97', ... 'MaxRSS': ''},
+    # {'JobID': '8231686.batch', 'JobName': 'batch', ... 'MaxRSS': '64844148K'}
+    # We should merge these into one.
+    # TEMP: Forget about MaxRSS, and just remove all entries with *.batch
+    entries = [entry for entry in entries if not entry['JobID'].endswith('.batch')]
     return entries
+
 
 def posixpath2str(obj):
     import pathlib
@@ -153,3 +161,44 @@ def posixpath2str(obj):
         return str(obj)
     else:
         return obj
+
+def defreeze_dict(frozen_dict: frozenset):
+    return {key: val for key, val in frozen_dict}
+
+
+
+
+from os.path import expandvars
+class LaunchLogManager:
+    def __init__(self, path=expandvars('$HOME/.lmd/launched.jsonl')) -> None:
+        self.path = path
+
+    def _refresh(self):
+        import json
+        from datetime import datetime
+        # Read entries from the top (oldest) to bottom (newest)
+        with open(self.path, 'r') as f:
+            entries = f.read().strip().split('\n')
+        cutoff_idx = -1
+        for idx, entry in enumerate(entries):
+            timestamp = json.loads(entry).get('timestamp')
+            dt = (datetime.now() - read_timestamp(timestamp)).seconds
+            if dt <= 60 * 60 * 30:
+                cutoff_idx = idx
+                break
+        refreshed_entries = entries[cutoff_idx:]
+
+        # Write in jsonl format
+        # NOTE: Make sure to add \n in the end!!
+        with open(self.path, 'w') as f:
+            f.write('\n'.join(refreshed_entries) + '\n')
+
+    def log(self, entry):
+        import json
+        # Prepare jsonification
+        entry = posixpath2str(entry)
+        with open(self.path, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+
+    def read(self):
+        pass

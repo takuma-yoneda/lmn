@@ -241,19 +241,20 @@ class SlurmMachine:
                 else:
                     data = []
 
+                # TODO: Use helpers.LaunchLogManager
                 # file mode should be w+? a? a+?? Look at this: https://stackoverflow.com/a/58925279/7057866
-                with open(launch_logfile, 'w') as f:
-                    new_entries = [new_entry]
+                # with open(launch_logfile, 'w') as f:
+                #     new_entries = [new_entry]
 
-                    # Remove whatever that is older than 30 hours
-                    for entry in data:
-                        dt = (now - read_timestamp(entry.get('timestamp'))).seconds
-                        if dt > 60 * 60 * 30:
-                            continue
-                        new_entries.append(entry)
+                #     # Remove whatever that is older than 30 hours
+                #     for entry in data:
+                #         dt = (now - read_timestamp(entry.get('timestamp'))).seconds
+                #         if dt > 60 * 60 * 30:
+                #             continue
+                #         new_entries.append(entry)
 
-                    # Save new entries
-                    json.dump(new_entries, f)
+                #     # Save new entries
+                #     json.dump(new_entries, f)
 
 
 class DockerMachine:
