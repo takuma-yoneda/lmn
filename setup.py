@@ -11,7 +11,7 @@ setup(
     version=__version__,  # type: ignore[name-defined]  # NOQA: F821
     packages=find_packages(),
     description=(
-        "Remote code execution for ML enthusiasts."
+        "Remote code deployment and execution for ML researchers."
     ),
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -30,7 +30,8 @@ setup(
         "Operating System :: MacOS",
         "Operating System :: Unix",
     ],
-    install_requires=["fabric", "docker", "randomname", "colorlog"],
+    install_requires=["fabric", "docker", "randomname", "colorlog",
+                      "simple_slurm_command @ git+https://github.com/takuma-yoneda/simple_slurm_command.git@6adbab0#egg=simple_slurm_command"],
     # extras_require={
     #     "lint": [
     #         "black>=19.10b0,<=20.8",
