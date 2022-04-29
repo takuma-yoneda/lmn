@@ -14,8 +14,7 @@ import invoke
 
 from lmd import logger
 
-DOCKER_WORKDIR = '/ws'
-DOCKER_OUTDIR = '/output'
+LMD_DOCKER_ROOTDIR = '/lmd'
 
 # NOTE: Should I have ssh-conf, slurm-conf and docker-conf separately??
 # I guess RemoteConfig should ONLY store the info on how to login to the host?
@@ -52,12 +51,22 @@ class SSHClient:
         return f'{self.remote_conf.base_uri}:{path}'
 
     def run(self, cmd, directory='$HOME', disown=False, hide=False, env=None, pty=False, dry_run=False):
+        import re
+        
         # TODO: Check if $HOME would work or not!!
         env = {} if env is None else env
 
+        # Replace LMD_* envvars: (${LMD_CODE_DIR}, ${LMD_OUTPUT_DIR}, ${LMD_MOUNT_DIR})
+        # This cannot happen automatically on remote server side, since we set these envvars exactly at the same time as other envvars.
+        lmd_envvars = ['LMD_CODE_DIR', 'LMD_OUTPUT_DIR', 'LMD_MOUNT_DIR']
+        for target_key in lmd_envvars:
+            # Match "${target_key}" or "$target_key"
+            env = {key: re.sub('${' + target_key + '}' + f'|${target_key}', env[target_key], str(val)) for key, val in env.items() if key not in lmd_envvars}
+
         # Perform shell escaping for envvars
+        # TEMP: shell escaping only when env contains space
         import shlex
-        env = {key: shlex.quote(str(val)) for key, val in env.items()}
+        env = {key: shlex.quote(str(val)) if " " in str(val) else str(val) for key, val in env.items()}
 
         if dry_run:
             logger.info('--- dry run ---')
@@ -105,10 +114,10 @@ class SSHMachine:
         # cmd = f'bash -c \'{cmd}\''
 
         logger.info(f'ssh run with command: {cmd}')
-        logger.info('cd to {self.project.remote_rootdir / relative_workdir}')
-        lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir}
+        logger.info(f'cd to {self.project.remote_dir / relative_workdir}')
+        lmdenv = {'LMD_CODE_DIR': self.project.remote_dir, 'LMD_OUTPUT_DIR': self.project.remote_outdir, 'LMD_MOUNT_DIR': self.project.remote_mountdir, 'LMD_USER_COMMAND': cmd}
         env.update(lmdenv)
-        return self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
+        return self.client.run(cmd, directory=(self.project.remote_dir / relative_workdir),
                                disown=disown, env=env, dry_run=dry_run, pty=True)
 
 
@@ -167,7 +176,7 @@ class SlurmMachine:
         # Hmmmm, Fabric seems to have an issue to handle envvar that contains spaces...
         # This is the issue of using "inline_ssh_env" that essentially sets envvars by putting bunch of export KEY=VAL before running shells.
         # The documentation clearly says developers need to handle shell escaping for non-trivial values.
-        lmdenv = {'LMD_ROOT_DIR': self.project.remote_rootdir, 'LMD_OUTPUT_DIR': self.project.remote_outdir, 'LMD_USER_COMMAND': cmd}
+        lmdenv = {'LMD_CODE_DIR': self.project.remote_dir, 'LMD_OUTPUT_DIR': self.project.remote_outdir, 'LMD_MOUNT_DIR': self.project.remote_mountdir, 'LMD_USER_COMMAND': cmd}
         env.update(lmdenv)
 
         if startup:
@@ -176,7 +185,7 @@ class SlurmMachine:
         if interactive:
             # cmd = f'{shell} -i -c \'{cmd}\''
             # Create a temp bash file and put it on the remote server.
-            workdir = self.project.remote_rootdir / relative_workdir
+            workdir = self.project.remote_dir / relative_workdir
             logger.info('exec file: ' + f"#!/usr/bin/env {shell}\n{cmd}\n{shell}")
             from io import StringIO
             file_obj = StringIO(f"#!/usr/bin/env {shell}\n{cmd}\n{shell}")
@@ -190,10 +199,10 @@ class SlurmMachine:
         else:
             cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {shell}')
             logger.info(f'sbatch mode:\n{cmd}')
-            logger.info(f'cd to {self.project.remote_rootdir / relative_workdir}')
+            logger.info(f'cd to {self.project.remote_dir / relative_workdir}')
 
             cmd = '\n'.join([cmd] * num_sequence)
-            result = self.client.run(cmd, directory=(self.project.remote_rootdir / relative_workdir),
+            result = self.client.run(cmd, directory=(self.project.remote_dir / relative_workdir),
                                      disown=False, env=env, dry_run=dry_run)
             if result.stderr:
                 logger.warn('sbatch job submission failed:', result.stderr)
@@ -255,8 +264,10 @@ class DockerMachine:
         self.project = project
         self.docker_conf = docker_conf
 
-        self.workdir = pjoin(DOCKER_WORKDIR, project.name)
-        self.outdir = pjoin(DOCKER_OUTDIR, project.name)
+        project_rootdir = pjoin(LMD_DOCKER_ROOTDIR, project.name)
+        self.codedir = pjoin(project_rootdir, 'code')
+        self.outdir = pjoin(project_rootdir, 'output')
+        self.mountdir = pjoin(project_rootdir, 'mount')
 
         # TODO: Pull the image if it doesn't exsit locally
 
@@ -279,24 +290,25 @@ class DockerMachine:
             raise KeyError('Docker X forwarding is not supported yet.')
             # self.docker_conf.use_x_forward(target_home=f'/home/{self.remote_conf.user}')
 
-        # Mount project dir
-        container_workdir = pjoin(DOCKER_WORKDIR)
-        container_outdir = pjoin(DOCKER_OUTDIR)
-        self.docker_conf.mounts += [Mount(target=container_workdir, source=self.project.remote_rootdir, type='bind'),
-                                        Mount(target=container_outdir, source=self.project.remote_outdir, type='bind')]
-        self.docker_conf.environment.update({'LMD_PROJECT_ROOT': container_workdir, 'LMD_OUTPUT_ROOT': container_outdir})
-        self.docker_conf.environment.update(env)
-        logger.info('mounts', self.docker_conf.mounts)
-        logger.info('docker_conf', self.docker_conf)
-
         if isinstance(cmd, list):
             cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
+
+        # Mount project dir
+        lmdenv = {'LMD_CODE_DIR': self.codedir, 'LMD_OUTPUT_DIR': self.outdir, 'LMD_MOUNT_DIR': self.mountdir, 'LMD_USER_COMMAND': cmd}
+        self.docker_conf.environment.update(lmdenv)
+        self.docker_conf.environment.update(env)
+        self.docker_conf.mounts += [Mount(target=self.codedir, source=self.project.remote_dir, type='bind'),
+                                    Mount(target=self.outdir, source=self.project.remote_outdir, type='bind'),
+                                    Mount(target=self.mountdir, source=self.project.remote_mountdir, type='bind')]
+        logger.info(f'mounts: {self.docker_conf.mounts}')
+        logger.info(f'docker_conf: {self.docker_conf}')
+
         if self.docker_conf.tty:
             startup = 'sleep 2' if startup is None else startup
-            cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {container_outdir} \''
-        logger.info('docker run with command:', cmd)
+            cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {self.outdir} \''
+        logger.info(f'docker run with command:{cmd}')
 
-        logger.info('container workdir:', str(container_workdir / relative_workdir))
+        logger.info(f'container codedir: {str(self.codedir / relative_workdir)}')
         # NOTE: Intentionally being super verbose to make arguments explicit.
         d = self.docker_conf
         container = self.client.containers.run(d.image,
@@ -310,10 +322,10 @@ class DockerMachine:
                                                mounts=d.mounts,
                                                environment=d.environment,
                                                device_requests=d.device_requests,
-                                               working_dir=str(container_workdir / relative_workdir),
+                                               working_dir=str(self.codedir / relative_workdir),
                                                # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
                                                )
-        logger.info('container', container)
+        logger.info(f'container: {container}')
         if disown:
             logger.warn('NOTE: disown is set to True. Output files will not be transported to your local directory.')
         else:
@@ -321,7 +333,8 @@ class DockerMachine:
             stream = container.logs(stream=True, follow=True)
             logger.info('--- listening container stdout/stderr ---\n')
             for char in stream:
-                logger.info(char.decode('utf-8'), end='')
+                # logger.info(char.decode('utf-8'))
+                print(char.decode('utf-8'), end='')
 
     def get_status(self, all=False):
         """List the status of containers associated to the project (it simply filters based on container name)

@@ -42,7 +42,7 @@ class CLISyncCommand(AbstractCLICommand):
         """Deploy the local repository and execute the command on a machine.
 
         1. get SSH connection to machine
-        2. run rsync(project.root_dir, project.remote_rootdir)
+        2. run rsync(project.local_dir, project.remote_dir)
         3. run machine.execute(parsed.remote_command)
         """
         from lmd.cli.utils import rsync
@@ -53,7 +53,7 @@ class CLISyncCommand(AbstractCLICommand):
         if parsed.machine not in config['machines']:
             raise KeyError(
                 f'Machine "{parsed.machine}" not found in the configuration. '
-                f'Available machines are: {list(config["machines"].keys())}'
+                f'Available machines are: {" ".join(config["machines"].keys())}'
             )
         machine_conf = config['machines'].get(parsed.machine)
         user, host = machine_conf['user'], machine_conf['host']
@@ -65,9 +65,8 @@ class CLISyncCommand(AbstractCLICommand):
         from os.path import join as pjoin
         from lmd.project import Project
         project = Project(name=parsed.name,
-                          root_dir=parsed.workdir,
-                          remote_dir=pjoin(machine_conf['root_dir'], parsed.name) if 'root_dir' in machine_conf else None,
-                          out_dir=parsed.outdir)
+                          local_dir=parsed.workdir,
+                          remote_root_dir=machine_conf.get('root_dir'))
         logger.info('project: {project}')
 
 
@@ -92,6 +91,23 @@ class CLISyncCommand(AbstractCLICommand):
         if project_conf and 'rsync' in project_conf:
             exclude.extend(project_conf['rsync'].get('exclude', []))
 
-        rsync_options = f"--rsync-path='mkdir -p {project.remote_rootdir} && mkdir -p {project.remote_outdir} && rsync'"
-        rsync(source_dir=project.root_dir, target_dir=ssh_client.uri(project.remote_rootdir), options=rsync_options,
-              exclude=exclude, dry_run=parsed.dry_run)
+        # A trick to create directories right before performing rsync
+        rsync_options = f"--rsync-path='mkdir -p {project.remote_dir} && mkdir -p {project.remote_outdir} && mkdir -p {project.remote_mountdir} && rsync'"
+        rsync(source_dir=project.local_dir, target_dir=ssh_client.uri(project.remote_dir), options=rsync_options,
+              exclude=exclude, dry_run=parsed.dry_run, transfer_rootdir=False)
+
+        # rsync the directories to mount
+        mount_dirs = project_conf.get('mount', [])
+        for mount_dir in mount_dirs:
+            rsync(source_dir=mount_dir, target_dir=ssh_client.uri(project.remote_mountdir),
+                exclude=exclude, dry_run=parsed.dry_run)
+
+        # Rsync remote outdir with the local outdir.
+        if project.local_outdir:
+            from lmd.cli.utils import rsync
+            # Check if there's any output file (the first line is always 'total [num-files]')
+            result = ssh_client.run(f'ls -l {project.remote_outdir} | grep -v "^total" | wc -l', hide=True)
+            num_output_files = int(result.stdout)
+            logger.info(f'{num_output_files} files are in the output directory')
+            if num_output_files:
+                rsync(source_dir=ssh_client.uri(project.remote_outdir), target_dir=project.local_outdir, dry_run=parsed.dry_run)

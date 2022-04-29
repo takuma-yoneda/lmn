@@ -40,7 +40,7 @@ def merge_nested_dict(a, b, path=None, conflict='use_b'):
     return a
 
 
-def parse_config(project_root):
+def parse_config(project_root, global_conf_paths=['${HOME}/.lmd.config', '${HOME}/.config/lmd']):
     """ Parse lmd config (json file)
 
     It looks for config file in this order:
@@ -58,7 +58,6 @@ def parse_config(project_root):
         return {}
 
     # TODO: Hmmm... a better way to write this config search algorithm?
-    global_conf_paths = ['${HOME}/.lmd.config', '${HOME}/.config/lmd']
     for path in global_conf_paths:
         path = expandvars(path)
         if isfile(path):

@@ -65,8 +65,8 @@ def run():
     parsed.workdir = find_project_root()
     current_dir = pathlib.Path(os.getcwd()).resolve()
     relative_workdir = current_dir.relative_to(parsed.workdir)
-    logger.info('Project root directory: {parsed.workdir}')
-    logger.info('relative working dir: {relative_workdir}')  # cwd.relative_to(project_root)
+    logger.info(f'Project root directory: {parsed.workdir}')
+    logger.info(f'relative working dir: {relative_workdir}')  # cwd.relative_to(project_root)
     parsed.name = parsed.workdir.stem
 
     # Read from lmd config file and reflect it

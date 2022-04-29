@@ -2,7 +2,17 @@
 import subprocess
 from lmd import logger
 
-def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False):
+def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, transfer_rootdir=True):
+    """
+    source_dir: hoge/fuga/source-dir/content-files
+    target_dir: Hoge/Fuga/target-dir
+
+    if transfer_rootdir is True:
+      target_dir: Hoge/Fuga/target-dir/source-dir/content-files
+
+    else:
+      target_dir: Hoge/Fuga/target-dir/content-files
+    """
     import shutil
     exclude = [] if exclude is None else exclude
     # make sure rsync is installed
@@ -10,12 +20,12 @@ def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False):
         raise RuntimeError("rsync binary is not found.")
     # ---
     logger.info(f"Syncing code...")
-    source_dir = str(source_dir).rstrip('/') + '/'
+    source_dir = str(source_dir).rstrip('/') + ('' if transfer_rootdir else '/')
     target_dir = str(target_dir).rstrip('/') + '/'
 
     exclude_str = ' '.join(f'--exclude \'{ex}\'' for ex in exclude)
 
-    cmd = f"rsync --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
+    cmd = f"rsync --info=progress2 --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
     logger.info(f'running command: {cmd}')
     run_cmd(cmd, shell=True, dry_run=dry_run)
     logger.info("Sync finished!")

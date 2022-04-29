@@ -116,7 +116,7 @@ class CLIRunCommand(AbstractCLICommand):
         """Deploy the local repository and execute the command on a machine.
 
         1. get SSH connection to machine
-        2. run rsync(project.root_dir, project.remote_rootdir)
+        2. run rsync(project.local_dir, project.remote_dir)
         3. run machine.execute(parsed.remote_command)
         """
         from lmd.cli.utils import rsync
@@ -127,7 +127,7 @@ class CLIRunCommand(AbstractCLICommand):
         if parsed.machine not in config['machines']:
             raise KeyError(
                 f'Machine "{parsed.machine}" not found in the configuration. '
-                f'Available machines are: {list(config["machines"].keys())}'
+                f'Available machines are: {" ".join(config["machines"].keys())}'
             )
         machine_conf = config['machines'].get(parsed.machine)
         user, host = machine_conf['user'], machine_conf['host']
@@ -139,10 +139,9 @@ class CLIRunCommand(AbstractCLICommand):
         from os.path import join as pjoin
         from lmd.project import Project
         project = Project(name=parsed.name,
-                          root_dir=parsed.workdir,
-                          remote_dir=pjoin(machine_conf['root_dir'], parsed.name) if 'root_dir' in machine_conf else None,
-                          out_dir=parsed.outdir)
-        logger.info('project: {project}')
+                          local_dir=parsed.workdir,
+                          remote_root_dir=machine_conf.get('root_dir', None))
+        logger.info(f'project: {project}')
 
 
         # NOTE: Order to check 'mode'
@@ -165,9 +164,16 @@ class CLIRunCommand(AbstractCLICommand):
         if project_conf and 'rsync' in project_conf:
             exclude.extend(project_conf['rsync'].get('exclude', []))
 
-        rsync_options = f"--rsync-path='mkdir -p {project.remote_rootdir} && mkdir -p {project.remote_outdir} && rsync'"
-        rsync(source_dir=project.root_dir, target_dir=ssh_client.uri(project.remote_rootdir), options=rsync_options,
-              exclude=exclude, dry_run=parsed.dry_run)
+        # rsync the source code
+        rsync_options = f"--rsync-path='mkdir -p {project.remote_dir} && mkdir -p {project.remote_outdir} && mkdir -p {project.remote_mountdir} && rsync'"
+        rsync(source_dir=project.local_dir, target_dir=ssh_client.uri(project.remote_dir), options=rsync_options,
+              exclude=exclude, dry_run=parsed.dry_run, transfer_rootdir=False)
+
+        # rsync the directories to mount
+        mount_dirs = project_conf.get('mount', [])
+        for mount_dir in mount_dirs:
+            rsync(source_dir=mount_dir, target_dir=ssh_client.uri(project.remote_mountdir),
+                exclude=exclude, dry_run=parsed.dry_run)
 
 
         # TODO: Clean it up later!!
@@ -215,7 +221,7 @@ class CLIRunCommand(AbstractCLICommand):
                 raise RuntimeError("docker image cannot be parsed. Something may be wrong with your docker configuration?")
 
             docker_conf = DockerContainerConfig(image, f'{user}-{project.name}')
-            logger.info('docker_conf: {docker_conf}')
+            logger.info(f'docker_conf: {docker_conf}')
 
             docker_machine = DockerMachine(docker_client, project, docker_conf=docker_conf)
             docker_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
@@ -241,10 +247,23 @@ class CLIRunCommand(AbstractCLICommand):
 
             if parsed.sweep:
                 assert parsed.disown, "You must set -d option to use sweep functionality."
-                begin, end = [int(val) for val in parsed.sweep.split('-')]
-                assert begin < end
+                # Parse input
+                # format #0: 8 --> 8
+                # format #1: 1-10 --> range(1, 10)
+                # format #2: 1,2,7 --> [1, 2, 7]
+                if '-' in parsed.sweep:
+                    # format #1
+                    begin, end = [int(val) for val in parsed.sweep.split('-')]
+                    assert begin < end
+                    sweep_ind = range(begin, end)
+                elif ',' in parsed.sweep:
+                    sweep_ind = [int(e) for e in parsed.sweep.strip().split(',')]
+                elif parsed.sweep.isnumeric():
+                    sweep_ind = [int(parsed.sweep)]
+                else:
+                    raise KeyError("Format for --sweep option is not recognizable. Format examples: '1-10', '8', '1,2,7'.")
 
-                for sweep_idx in range(begin, end):
+                for sweep_idx in sweep_ind:
                     env.update({'LMD_RUN_SWEEP_IDX': sweep_idx})
                     slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
                                           interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run, sweeping=True)
@@ -260,14 +279,14 @@ class CLIRunCommand(AbstractCLICommand):
             raise KeyError('mode: {parsed.mode} is not available.')
 
         # Rsync remote outdir with the local outdir.
-        if project.out_dir:
+        if project.local_outdir:
             from lmd.cli.utils import rsync
             # Check if there's any output file (the first line is always 'total [num-files]')
             result = ssh_client.run(f'ls -l {project.remote_outdir} | grep -v "^total" | wc -l', hide=True)
             num_output_files = int(result.stdout)
             logger.info(f'{num_output_files} files are in the output directory')
             if num_output_files:
-                rsync(source_dir=ssh_client.uri(project.remote_outdir), target_dir=project.out_dir, dry_run=parsed.dry_run)
+                rsync(source_dir=ssh_client.uri(project.remote_outdir), target_dir=project.local_outdir, dry_run=parsed.dry_run)
 
 
 
