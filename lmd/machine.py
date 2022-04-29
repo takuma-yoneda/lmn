@@ -61,7 +61,7 @@ class SSHClient:
         lmd_envvars = ['LMD_CODE_DIR', 'LMD_OUTPUT_DIR', 'LMD_MOUNT_DIR']
         for target_key in lmd_envvars:
             # Match "${target_key}" or "$target_key"
-            env = {key: re.sub('${' + target_key + '}' + f'|${target_key}', env[target_key], str(val)) for key, val in env.items() if key not in lmd_envvars}
+            env = {key: re.sub('${' + target_key + '}' + f'|${target_key}', env[target_key], str(val)) for key, val in env.items()}
 
         # Perform shell escaping for envvars
         # TEMP: shell escaping only when env contains space

@@ -96,14 +96,14 @@ def remove_recursively(config_dict, key='__help'):
 def find_project_root():
     """Find a project root (which is rsync-ed with the remote server).
 
-    It first goes up in the directory tree to find ".git" or ".lmd" file.
+    It first goes up in the directory tree to find ".git" or ".lmd.config" file.
     If not found, print warning and just use the current directory
     """
     from lmd import logger
     def is_proj_root(directory: Path):
         if (directory / '.git').is_dir():
             return True
-        if (directory / '.lmd').is_file():
+        if (directory / '.lmd.config').is_file():
             return True
         return False
 
