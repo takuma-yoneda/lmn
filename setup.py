@@ -30,8 +30,7 @@ setup(
         "Operating System :: MacOS",
         "Operating System :: Unix",
     ],
-    install_requires=["fabric", "docker", "randomname", "colorlog",
-                      "simple_slurm_command @ git+https://github.com/takuma-yoneda/simple_slurm_command.git@6adbab0#egg=simple_slurm_command"],
+    install_requires=["fabric", "docker", "randomname", "colorlog", "simple_slurm_command"],
     # extras_require={
     #     "lint": [
     #         "black>=19.10b0,<=20.8",
