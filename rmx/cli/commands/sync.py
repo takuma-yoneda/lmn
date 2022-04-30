@@ -2,9 +2,9 @@
 
 import argparse
 import pathlib
-from lmd.cli import AbstractCLICommand
+from rmx.cli import AbstractCLICommand
 from typing import Optional, List
-from lmd import logger
+from rmx import logger
 
 Arguments = List[str]
 RSYNC_DESTINATION_PATH = "/tmp/".rstrip('/')
@@ -34,11 +34,11 @@ class CLISyncCommand(AbstractCLICommand):
         2. run rsync(project.local_dir, project.remote_dir)
         3. run machine.execute(parsed.remote_command)
         """
-        from lmd.cli.utils import rsync
+        from rmx.cli.utils import rsync
 
-        # Read from lmd config file and reflect it
+        # Read from rmx config file and reflect it
         # TODO: clean this up
-        from lmd.machine import RemoteConfig
+        from rmx.machine import RemoteConfig
         if parsed.machine not in config['machines']:
             raise KeyError(
                 f'Machine "{parsed.machine}" not found in the configuration. '
@@ -52,7 +52,7 @@ class CLISyncCommand(AbstractCLICommand):
 
 
         from os.path import join as pjoin
-        from lmd.project import Project
+        from rmx.project import Project
         project = Project(name=parsed.name,
                           local_dir=parsed.workdir,
                           remote_root_dir=machine_conf.get('root_dir'))
@@ -66,7 +66,7 @@ class CLISyncCommand(AbstractCLICommand):
         # 3. Use ssh mode
         # mode = parsed.mode if parsed.mode else machine_conf.get('default_mode', 'ssh')
 
-        from lmd.machine import SSHClient
+        from rmx.machine import SSHClient
         ssh_client = SSHClient(remote_conf)
 
         # TODO: Hmmm ugly... let's fix it later
@@ -93,7 +93,7 @@ class CLISyncCommand(AbstractCLICommand):
 
         # Rsync remote outdir with the local outdir.
         if project.local_outdir:
-            from lmd.cli.utils import rsync
+            from rmx.cli.utils import rsync
             # Check if there's any output file (the first line is always 'total [num-files]')
             result = ssh_client.run(f'ls -l {project.remote_outdir} | grep -v "^total" | wc -l', hide=True)
             num_output_files = int(result.stdout)

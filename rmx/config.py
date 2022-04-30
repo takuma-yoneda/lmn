@@ -2,7 +2,7 @@
 import os
 from os.path import expandvars
 import docker
-from lmd import logger
+from rmx import logger
 
 class DockerContainerConfig:
     def __init__(self, image, name, remove=True, network='host', ipc_mode='host', mounts=None,
@@ -60,7 +60,7 @@ class DockerContainerConfig:
         # something like: /private/tmp/com.apple.launchd.jY5AhC1lFM/org.xquartz:0
         # which doesn't work (??)
         if 'xquartz' in os.environ.get('DISPLAY', ''):
-            from lmd.cli.utils import run_cmd
+            from rmx.cli.utils import run_cmd
             ip = run_cmd('ifconfig en0 | grep inet | awk \'$1=="inet" {print $2}\'', get_output=True, shell=True)
             display = f'{ip}:0'
         else:

@@ -40,17 +40,17 @@ def merge_nested_dict(a, b, path=None, conflict='use_b'):
     return a
 
 
-def parse_config(project_root, global_conf_paths=['${HOME}/.lmd.config', '${HOME}/.config/lmd']):
-    """ Parse lmd config (json file)
+def parse_config(project_root, global_conf_paths=['${HOME}/.rmx.config', '${HOME}/.config/rmx']):
+    """ Parse rmx config (json file)
 
     It looks for config file in this order:
-    1. {project_root}/.lmd.config
-    2. $HOME/.lmd.config
-    3. $HOME/.config/lmd
+    1. {project_root}/.rmx.config
+    2. $HOME/.rmx.config
+    3. $HOME/.config/rmx
     """
     import json
     from os.path import expandvars, isfile
-    from lmd import logger
+    from rmx import logger
 
     def _maybe_load(path):
         if isfile(path):
@@ -70,10 +70,10 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.lmd.config', '${HOME
         with open(path, 'r') as f:
             global_conf = json.load(f)
     else:
-        logger.warn('LMD global config file cannot be located.')
+        logger.warn('rmx global config file cannot be located.')
         global_conf = {}
 
-    local_conf = _maybe_load(f'{project_root}/.lmd.config')
+    local_conf = _maybe_load(f'{project_root}/.rmx.config')
 
     global_conf = remove_recursively(global_conf, key='__help')
     local_conf = remove_recursively(local_conf, key='__help')
@@ -96,14 +96,14 @@ def remove_recursively(config_dict, key='__help'):
 def find_project_root():
     """Find a project root (which is rsync-ed with the remote server).
 
-    It first goes up in the directory tree to find ".git" or ".lmd.config" file.
+    It first goes up in the directory tree to find ".git" or ".rmx.config" file.
     If not found, print warning and just use the current directory
     """
-    from lmd import logger
+    from rmx import logger
     def is_proj_root(directory: Path):
         if (directory / '.git').is_dir():
             return True
-        if (directory / '.lmd.config').is_file():
+        if (directory / '.rmx.config').is_file():
             return True
         return False
 
@@ -115,7 +115,7 @@ def find_project_root():
         if is_proj_root(directory):
             return directory
 
-    logger.warn('.git directory or .lmd file not found in the ancestor directories.\n'
+    logger.warn('.git directory or .rmx file not found in the ancestor directories.\n'
                 'Setting project root to current directory')
 
     assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."
@@ -143,7 +143,7 @@ def parse_sacct(sacct_output):
     keys = lines[0].split('|')
     entries = [{key: entry for key, entry in zip(keys, line.split('|'))} for line in lines[1:]]
     # NOTE: For a batch job, sacct shows two entries for one job submission:
-    # {'JobID': '8231686', 'JobName': 'lmd-iti-coped-chief-97', ... 'MaxRSS': ''},
+    # {'JobID': '8231686', 'JobName': 'rmx-iti-coped-chief-97', ... 'MaxRSS': ''},
     # {'JobID': '8231686.batch', 'JobName': 'batch', ... 'MaxRSS': '64844148K'}
     # We should merge these into one.
     # TEMP: Forget about MaxRSS, and just remove all entries with *.batch
@@ -170,7 +170,7 @@ def defreeze_dict(frozen_dict: frozenset):
 
 from os.path import expandvars
 class LaunchLogManager:
-    def __init__(self, path=expandvars('$HOME/.lmd/launched.jsonl')) -> None:
+    def __init__(self, path=expandvars('$HOME/.rmx/launched.jsonl')) -> None:
         self.path = path
 
     def _refresh(self):

@@ -3,10 +3,10 @@ import os
 from os.path import join as pjoin
 from os.path import expandvars
 
-from lmd.config import DockerContainerConfig, SlurmConfig, SingularityConfig
+from rmx.config import DockerContainerConfig, SlurmConfig, SingularityConfig
 
 REMOTE_ROOT_DIR = '/tmp'
-LOCAL_OUTPUT_DIR = expandvars('${HOME}/.lmd/output')
+LOCAL_OUTPUT_DIR = expandvars('${HOME}/.rmx/output')
 
 # TODO: Maybe better to separate docker project / slurm project etc??
 # The only diff will be whether to use self.docker_image / self.singularity_image

@@ -1,14 +1,14 @@
 # Configurations
 
 ## Global configuration
-LMD looks for a configuration file in this order:
-1. `{project_root}.lmd.config`
-2. `$HOME/.lmd.config`
-3. `$HOME/.config/lmd`
+rmx looks for a configuration file in this order:
+1. `{project_root}.rmx.config`
+2. `$HOME/.rmx.config`
+3. `$HOME/.config/rmx`
 
-NOTE: project root is determined by checking if a directory contains `.git` or `.lmd.config`. If not found in the current directory, LMD recursively traverses its parents to search for it.
+NOTE: project root is determined by checking if a directory contains `.git` or `.rmx.config`. If not found in the current directory, rmx recursively traverses its parents to search for it.
 
 ## Local configuration
-LMD looks for `{project_root}/.lmd.config`.  
+RMX looks for `{project_root}/.rmx.config`.  
 local and global configurations are merged.
 

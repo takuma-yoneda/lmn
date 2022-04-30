@@ -5,14 +5,14 @@ import sys
 import argparse
 import pathlib
 
-import lmd
-from lmd import __version__
-from lmd.helpers import find_project_root
+import rmx
+from rmx import __version__
+from rmx.helpers import find_project_root
 
-from lmd.cli.commands.run import CLIRunCommand
-from lmd.cli.commands.sync import CLISyncCommand
-from lmd.cli.commands.status import CLIStatusCommand
-from lmd import logger
+from rmx.cli.commands.run import CLIRunCommand
+from rmx.cli.commands.sync import CLISyncCommand
+from rmx.cli.commands.status import CLIStatusCommand
+from rmx import logger
 
 _supported_commands = {
     'run': CLIRunCommand,
@@ -36,7 +36,7 @@ def run():
     - parse args and pass them to a proper subcommand
     """
 
-    print(f"lmd - Remote code execution for ML researchers - v{lmd.__version__}")
+    print(f"rmx - Remote code execution for ML researchers - v{rmx.__version__}")
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         'command',
@@ -69,9 +69,9 @@ def run():
     logger.info(f'relative working dir: {relative_workdir}')  # cwd.relative_to(project_root)
     parsed.name = parsed.workdir.stem
 
-    # Read from lmd config file and reflect it
+    # Read from rmx config file and reflect it
     # TODO: clean this up
-    from lmd.helpers import parse_config
+    from rmx.helpers import parse_config
     config = parse_config(parsed.workdir)
 
     command.execute(config, parsed, relative_workdir=relative_workdir)

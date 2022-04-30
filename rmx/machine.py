@@ -5,16 +5,16 @@ from os.path import join as pjoin
 from os.path import expandvars
 from typing import Optional, Union
 from docker import DockerClient
-from lmd.config import DockerContainerConfig
-from lmd.helpers import posixpath2str
-from lmd.project import Project
+from rmx.config import DockerContainerConfig
+from rmx.helpers import posixpath2str
+from rmx.project import Project
 
 import fabric
 import invoke
 
-from lmd import logger
+from rmx import logger
 
-LMD_DOCKER_ROOTDIR = '/lmd'
+RMX_DOCKER_ROOTDIR = '/rmx'
 
 # NOTE: Should I have ssh-conf, slurm-conf and docker-conf separately??
 # I guess RemoteConfig should ONLY store the info on how to login to the host?
@@ -56,10 +56,10 @@ class SSHClient:
         # TODO: Check if $HOME would work or not!!
         env = {} if env is None else env
 
-        # Replace LMD_* envvars: (${LMD_CODE_DIR}, ${LMD_OUTPUT_DIR}, ${LMD_MOUNT_DIR})
+        # Replace RMX_* envvars: (${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR})
         # This cannot happen automatically on remote server side, since we set these envvars exactly at the same time as other envvars.
-        lmd_envvars = ['LMD_CODE_DIR', 'LMD_OUTPUT_DIR', 'LMD_MOUNT_DIR']
-        for target_key in lmd_envvars:
+        rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
+        for target_key in rmx_envvars:
             # Match "${target_key}" or "$target_key"
             env = {key: re.sub('${' + target_key + '}' + f'|${target_key}', env[target_key], str(val)) for key, val in env.items()}
 
@@ -115,8 +115,8 @@ class SSHMachine:
 
         logger.info(f'ssh run with command: {cmd}')
         logger.info(f'cd to {self.project.remote_dir / relative_workdir}')
-        lmdenv = {'LMD_CODE_DIR': self.project.remote_dir, 'LMD_OUTPUT_DIR': self.project.remote_outdir, 'LMD_MOUNT_DIR': self.project.remote_mountdir, 'LMD_USER_COMMAND': cmd}
-        env.update(lmdenv)
+        rmxenv = {'RMX_CODE_DIR': self.project.remote_dir, 'RMX_OUTPUT_DIR': self.project.remote_outdir, 'RMX_MOUNT_DIR': self.project.remote_mountdir, 'RMX_USER_COMMAND': cmd}
+        env.update(rmxenv)
         return self.client.run(cmd, directory=(self.project.remote_dir / relative_workdir),
                                disown=disown, env=env, dry_run=dry_run, pty=True)
 
@@ -157,7 +157,7 @@ class SlurmMachine:
             import random
             proj_name_maxlen = 15
             rand_num = random.randint(0, 100)
-            job_name = f'lmd-{self.project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
+            job_name = f'rmx-{self.project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
         slurm_command = SlurmCommand(cpus_per_task=s.cpus_per_task,
                                      job_name=job_name,
                                      partition=s.partition,
@@ -176,8 +176,8 @@ class SlurmMachine:
         # Hmmmm, Fabric seems to have an issue to handle envvar that contains spaces...
         # This is the issue of using "inline_ssh_env" that essentially sets envvars by putting bunch of export KEY=VAL before running shells.
         # The documentation clearly says developers need to handle shell escaping for non-trivial values.
-        lmdenv = {'LMD_CODE_DIR': self.project.remote_dir, 'LMD_OUTPUT_DIR': self.project.remote_outdir, 'LMD_MOUNT_DIR': self.project.remote_mountdir, 'LMD_USER_COMMAND': cmd}
-        env.update(lmdenv)
+        rmxenv = {'RMX_CODE_DIR': self.project.remote_dir, 'RMX_OUTPUT_DIR': self.project.remote_outdir, 'RMX_MOUNT_DIR': self.project.remote_mountdir, 'RMX_USER_COMMAND': cmd}
+        env.update(rmxenv)
 
         if startup:
             cmd = f'{startup} && {cmd}'
@@ -231,10 +231,10 @@ class SlurmMachine:
                              'sweeping': sweeping}
 
                 # Prepare jsonification
-                from lmd.helpers import posixpath2str
+                from rmx.helpers import posixpath2str
                 new_entry = posixpath2str(new_entry)
 
-                launch_logfile = expandvars('$HOME/.lmd/launched.json')
+                launch_logfile = expandvars('$HOME/.rmx/launched.json')
                 if os.path.isfile(launch_logfile):
                     with open(launch_logfile, 'r') as f:
                         data = json.load(f)
@@ -265,7 +265,7 @@ class DockerMachine:
         self.project = project
         self.docker_conf = docker_conf
 
-        project_rootdir = pjoin(LMD_DOCKER_ROOTDIR, project.name)
+        project_rootdir = pjoin(rmx_DOCKER_ROOTDIR, project.name)
         self.codedir = pjoin(project_rootdir, 'code')
         self.outdir = pjoin(project_rootdir, 'output')
         self.mountdir = pjoin(project_rootdir, 'mount')
@@ -295,8 +295,8 @@ class DockerMachine:
             cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
 
         # Mount project dir
-        lmdenv = {'LMD_CODE_DIR': self.codedir, 'LMD_OUTPUT_DIR': self.outdir, 'LMD_MOUNT_DIR': self.mountdir, 'LMD_USER_COMMAND': cmd}
-        self.docker_conf.environment.update(lmdenv)
+        rmxenv = {'RMX_CODE_DIR': self.codedir, 'RMX_OUTPUT_DIR': self.outdir, 'RMX_MOUNT_DIR': self.mountdir, 'RMX_USER_COMMAND': cmd}
+        self.docker_conf.environment.update(rmxenv)
         self.docker_conf.environment.update(env)
         self.docker_conf.mounts += [Mount(target=self.codedir, source=self.project.remote_dir, type='bind'),
                                     Mount(target=self.outdir, source=self.project.remote_outdir, type='bind'),

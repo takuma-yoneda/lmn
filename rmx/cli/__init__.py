@@ -5,7 +5,7 @@ import os
 from abc import abstractmethod, ABC
 from typing import Optional, Type
 
-from lmd.types import Arguments
+from rmx.types import Arguments
 
 
 class AbstractCLICommand(ABC):
@@ -60,7 +60,7 @@ class AbstractCLICommand(ABC):
     def get_parser(cls, args: Arguments) -> argparse.ArgumentParser:
         common_parser = cls.common_parser()
         command_parser = cls.parser(common_parser, args)
-        command_parser.prog = f'lmd {cls.KEY}'
+        command_parser.prog = f'rmx {cls.KEY}'
         return command_parser
 
     @staticmethod
@@ -75,7 +75,7 @@ class AbstractCLICommand(ABC):
         pass
 
 
-class LMDCLI:
+class RMXCLI:
 
     @staticmethod
     def parse_arguments(command: Type[AbstractCLICommand], args: Arguments) -> argparse.Namespace:
@@ -92,6 +92,6 @@ class LMDCLI:
 
 __all__ = [
     "AbstractCLICommand",
-    "LMDCLI",
+    "RMXCLI",
     # "cpklogger"
 ]
