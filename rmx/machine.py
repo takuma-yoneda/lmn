@@ -265,7 +265,7 @@ class DockerMachine:
         self.project = project
         self.docker_conf = docker_conf
 
-        project_rootdir = pjoin(rmx_DOCKER_ROOTDIR, project.name)
+        project_rootdir = pjoin(RMX_DOCKER_ROOTDIR, project.name)
         self.codedir = pjoin(project_rootdir, 'code')
         self.outdir = pjoin(project_rootdir, 'output')
         self.mountdir = pjoin(project_rootdir, 'mount')
