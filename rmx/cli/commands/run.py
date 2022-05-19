@@ -80,7 +80,7 @@ class CLIRunCommand(AbstractCLICommand):
             "--sweep",
             action="store",
             type=str,
-            help="specify sweep range (e.g., --sweep 1-255) this is reflected to envvar $rmx_RUN_SWEEP_IDX"
+            help="specify sweep range (e.g., --sweep 1-255) this is reflected to envvar $RMX_RUN_SWEEP_IDX"
                  "Temporarily only available for slurm mode."
         )
         # TEMP:
@@ -259,7 +259,7 @@ class CLIRunCommand(AbstractCLICommand):
                     raise KeyError("Format for --sweep option is not recognizable. Format examples: '1-10', '8', '1,2,7'.")
 
                 for sweep_idx in sweep_ind:
-                    env.update({'rmx_RUN_SWEEP_IDX': sweep_idx})
+                    env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
                     slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
                                           interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run, sweeping=True)
             else:
