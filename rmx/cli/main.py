@@ -17,7 +17,7 @@ from rmx import logger
 _supported_commands = {
     'run': CLIRunCommand,
     'sync': CLISyncCommand,
-    'status': CLIStatusCommand,
+    # 'status': CLIStatusCommand,
     # 'create': CLICreateCommand,
     # 'info': CLIInfoCommand,
     # 'build': CLIBuildCommand,

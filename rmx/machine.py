@@ -61,7 +61,8 @@ class SSHClient:
         rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
         for target_key in rmx_envvars:
             # Match "${target_key}" or "$target_key"
-            env = {key: re.sub('${' + target_key + '}' + f'|${target_key}', env[target_key], str(val)) for key, val in env.items()}
+            regex = r'{}'.format('(\$\{' + target_key + '\}' + f'|\$' + target_key + ')')
+            env = {key: re.sub(regex, env[target_key], str(val)) for key, val in env.items()}
 
         # Perform shell escaping for envvars
         # TEMP: shell escaping only when env contains space
