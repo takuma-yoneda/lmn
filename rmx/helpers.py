@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 from pathlib import Path
-from typing import Iterator
+from typing import Dict, Iterator
 
 def is_system_root(directory: Path):
     return directory == directory.parent
@@ -166,6 +166,17 @@ def defreeze_dict(frozen_dict: frozenset):
     return {key: val for key, val in frozen_dict}
 
 
+
+def replace_rmx_envvars(env: Dict):
+    import re
+    # Replace RMX_* envvars: (${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR})
+    # This cannot happen automatically on remote server side, since we set these envvars exactly at the same time as other envvars.
+    rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
+    for target_key in rmx_envvars:
+        # Match "${target_key}" or "$target_key"
+        regex = r'{}'.format('(\$\{' + target_key + '\}' + f'|\$' + target_key + ')')
+        env = {key: re.sub(regex, env[target_key], str(val)) for key, val in env.items()}
+    return env
 
 
 from os.path import expandvars

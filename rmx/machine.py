@@ -6,7 +6,7 @@ from os.path import expandvars
 from typing import Optional, Union
 from docker import DockerClient
 from rmx.config import DockerContainerConfig
-from rmx.helpers import posixpath2str
+from rmx.helpers import posixpath2str, replace_rmx_envvars
 from rmx.project import Project
 
 import fabric
@@ -55,14 +55,7 @@ class SSHClient:
         
         # TODO: Check if $HOME would work or not!!
         env = {} if env is None else env
-
-        # Replace RMX_* envvars: (${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR})
-        # This cannot happen automatically on remote server side, since we set these envvars exactly at the same time as other envvars.
-        rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
-        for target_key in rmx_envvars:
-            # Match "${target_key}" or "$target_key"
-            regex = r'{}'.format('(\$\{' + target_key + '\}' + f'|\$' + target_key + ')')
-            env = {key: re.sub(regex, env[target_key], str(val)) for key, val in env.items()}
+        env = replace_rmx_envvars(env)
 
         # Perform shell escaping for envvars
         # TEMP: shell escaping only when env contains space
@@ -275,7 +268,7 @@ class DockerMachine:
 
 
     def execute(self, cmd, relative_workdir, startup=None, disown=False, shell=True, use_gpus=True, x_forward=False, env=None):
-        env = [] if env is None else env
+        env = {} if env is None else env
 
         # Using docker
         import docker
@@ -297,8 +290,9 @@ class DockerMachine:
 
         # Mount project dir
         rmxenv = {'RMX_CODE_DIR': self.codedir, 'RMX_OUTPUT_DIR': self.outdir, 'RMX_MOUNT_DIR': self.mountdir, 'RMX_USER_COMMAND': cmd}
-        self.docker_conf.environment.update(rmxenv)
-        self.docker_conf.environment.update(env)
+        allenv = {**rmxenv, **env, **self.docker_conf.environment}
+        allenv = replace_rmx_envvars(allenv)
+        self.docker_conf.environment = allenv
         self.docker_conf.mounts += [Mount(target=self.codedir, source=self.project.remote_dir, type='bind'),
                                     Mount(target=self.outdir, source=self.project.remote_outdir, type='bind'),
                                     Mount(target=self.mountdir, source=self.project.remote_mountdir, type='bind')]
@@ -336,7 +330,8 @@ class DockerMachine:
             logger.info('--- listening container stdout/stderr ---\n')
             for char in stream:
                 # logger.info(char.decode('utf-8'))
-                print(char.decode('utf-8'), end='')
+                # 'ignore' ignores decode error that happens when multi-byte char is passed.
+                print(char.decode('utf-8', 'ignore'), end='')
 
     def get_status(self, all=False):
         """List the status of containers associated to the project (it simply filters based on container name)
