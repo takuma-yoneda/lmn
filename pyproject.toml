@@ -1,0 +1,34 @@
+[project]
+name = "rmx"
+version = "0.0.3"
+description = "Remote code deployment and execution for ML researchers."
+authors = [
+    {name = "Takuma Yoneda", email = "takuma-yoneda@users.noreply.github.com"},
+    {name = "Takuma Yoneda",email = "takuma.ynd@gmail.com"}
+]
+dependencies = ["colorlog", "docker", "fabric", "randomname", "simple_slurm_command"]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {text = "MIT License"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+]
+[project.urls]
+Homepage = "https://github.com/takuma-yoneda/rmx"
+[project.scripts]
+rmx = "rmx.cli.main:run"
+
+[tool.pdm]
+package-dir = "."
+
+[build-system]
+requires = ["pdm-pep517>=1.0.0"]
+build-backend = "pdm.pep517.api"

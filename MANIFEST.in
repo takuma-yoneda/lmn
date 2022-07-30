@@ -1,0 +1,7 @@
+include *.lock
+include *.py
+include Pipfile
+recursive-include example *.config
+recursive-include example *.md
+recursive-include example *.mp4
+recursive-include example *.txt
