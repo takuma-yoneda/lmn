@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
-from abc import ABC
 import os
-from os.path import join as pjoin
 from os.path import expandvars
-from typing import Optional, Union
-from docker import DockerClient
-from rmx.config import DockerContainerConfig
 from rmx.helpers import posixpath2str, replace_rmx_envvars
-from rmx.project import Project
-
-import fabric
-import invoke
 
 from rmx import logger
 
@@ -20,6 +11,10 @@ RMX_DOCKER_ROOTDIR = '/rmx'
 # I guess RemoteConfig should ONLY store the info on how to login to the host?
 # docker info and slurm info should really reside in project.
 class RemoteConfig:
+    """Represents a configuration to connect to a remote server.
+    This is used by SimpleSSHClient.
+    """
+
     from fabric import Connection
     def __init__(self, user, host, port=22, slurm_node=False) -> None:
         self.user = user
@@ -42,7 +37,10 @@ class RemoteConfig:
     def get_dict(self):
         return {key: val for key, val in vars(self).items() if not (key.startswith('__') or callable(val))}
 
-class SSHClient:
+
+class SimpleSSHClient:
+    """Given a remote config, this provides an interface to ssh into a remote machine.
+    """
     def __init__(self, remote_conf: RemoteConfig) -> None:
         self.remote_conf = remote_conf
         self.conn = self.remote_conf.get_connection()
@@ -92,36 +90,13 @@ class SSHClient:
         raise NotImplementedError
 
 
-class SSHMachine:
-    def __init__(self, client: SSHClient, project: Project) -> None:
-        self.client = client
-        self.project = project
-
-    def execute(self, cmd, relative_workdir, startup=None, disown=False, use_gpus=True, x_forward=False, env=None, dry_run=False) -> None:
-        env = {} if env is None else env
-        if isinstance(cmd, list):
-            cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
-
-        if startup:
-            cmd = f'{startup} && {cmd}'
-        # cmd = f'bash -c \'{cmd}\''
-        # cmd = f'bash -c \'{cmd}\''
-
-        logger.info(f'ssh run with command: {cmd}')
-        logger.info(f'cd to {self.project.remote_dir / relative_workdir}')
-        rmxenv = {'RMX_CODE_DIR': self.project.remote_dir, 'RMX_OUTPUT_DIR': self.project.remote_outdir, 'RMX_MOUNT_DIR': self.project.remote_mountdir, 'RMX_USER_COMMAND': cmd}
-        env.update(rmxenv)
-        return self.client.run(cmd, directory=(self.project.remote_dir / relative_workdir),
-                               disown=disown, env=env, dry_run=dry_run, pty=True)
-
-
 class SlurmMachine:
     """Use srun/sbatch to submit the command on a remote machine.
 
     If your local machine has slurm (i.e., you're on slurm login-node), I guess you don't need this tool.
     Thus SlurmMachine inherits SSHMachine.
     """
-    def __init__(self, client: SSHClient, project, slurm_conf) -> None:
+    def __init__(self, client: SimpleSSHClient, project, slurm_conf) -> None:
         self.client = client
         self.project = project
         self.slurm_conf = slurm_conf
@@ -249,97 +224,3 @@ class SlurmMachine:
 
                 #     # Save new entries
                 #     json.dump(new_entries, f)
-
-
-class DockerMachine:
-    """A class to execute any code for a specific project.
-    """
-    def __init__(self, docker_client: DockerClient, project: Project, docker_conf: DockerContainerConfig) -> None:
-        self.client = docker_client
-        self.project = project
-        self.docker_conf = docker_conf
-
-        project_rootdir = pjoin(RMX_DOCKER_ROOTDIR, project.name)
-        self.codedir = pjoin(project_rootdir, 'code')
-        self.outdir = pjoin(project_rootdir, 'output')
-        self.mountdir = pjoin(project_rootdir, 'mount')
-
-        # TODO: Pull the image if it doesn't exsit locally
-
-
-    def execute(self, cmd, relative_workdir, startup=None, disown=False, shell=True, use_gpus=True, x_forward=False, env=None):
-        env = {} if env is None else env
-
-        # Using docker
-        import docker
-        from docker.types import Mount
-
-        if shell:
-            self.docker_conf.tty = True
-
-        if use_gpus:
-            self.docker_conf.use_gpus()
-
-        # TODO: Fix it later
-        if x_forward:
-            raise KeyError('Docker X forwarding is not supported yet.')
-            # self.docker_conf.use_x_forward(target_home=f'/home/{self.remote_conf.user}')
-
-        if isinstance(cmd, list):
-            cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
-
-        # Mount project dir
-        rmxenv = {'RMX_CODE_DIR': self.codedir, 'RMX_OUTPUT_DIR': self.outdir, 'RMX_MOUNT_DIR': self.mountdir, 'RMX_USER_COMMAND': cmd}
-        allenv = {**rmxenv, **env, **self.docker_conf.environment}
-        allenv = replace_rmx_envvars(allenv)
-        self.docker_conf.environment = allenv
-        self.docker_conf.mounts += [Mount(target=self.codedir, source=self.project.remote_dir, type='bind'),
-                                    Mount(target=self.outdir, source=self.project.remote_outdir, type='bind'),
-                                    Mount(target=self.mountdir, source=self.project.remote_mountdir, type='bind')]
-        logger.info(f'mounts: {self.docker_conf.mounts}')
-        logger.info(f'docker_conf: {self.docker_conf}')
-
-        if self.docker_conf.tty:
-            startup = 'sleep 2' if startup is None else startup
-            cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {self.outdir} \''
-        logger.info(f'docker run with command:{cmd}')
-
-        logger.info(f'container codedir: {str(self.codedir / relative_workdir)}')
-        # NOTE: Intentionally being super verbose to make arguments explicit.
-        d = self.docker_conf
-        container = self.client.containers.run(d.image,
-                                               cmd,
-                                               name=d.name,
-                                               remove=d.remove,  # Keep it running as we need to change
-                                               network=d.network,
-                                               ipc_mode=d.ipc_mode,
-                                               detach=d.detach,
-                                               tty=d.tty,
-                                               mounts=d.mounts,
-                                               environment=d.environment,
-                                               device_requests=d.device_requests,
-                                               working_dir=str(self.codedir / relative_workdir),
-                                               # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
-                                               )
-        logger.info(f'container: {container}')
-        if disown:
-            logger.warn('NOTE: disown is set to True. Output files will not be transported to your local directory.')
-        else:
-            # Block and listen to the stream from container
-            stream = container.logs(stream=True, follow=True)
-            logger.info('--- listening container stdout/stderr ---\n')
-            for char in stream:
-                # logger.info(char.decode('utf-8'))
-                # 'ignore' ignores decode error that happens when multi-byte char is passed.
-                print(char.decode('utf-8', 'ignore'), end='')
-
-    def get_status(self, all=False):
-        """List the status of containers associated to the project (it simply filters based on container name)
-
-        Only returns running container as default. Set all=True if you want to have a full list.
-        """
-
-        # Filter by image name
-        container_list = self.client.containers.list(all=all, filters={'ancestor': self.project.docker.image})
-        return container_list
-

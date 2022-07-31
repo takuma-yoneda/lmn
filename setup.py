@@ -43,5 +43,5 @@ setup(
     # package_data={"pysen": ["py.typed"]},
     # package_dir={'rmx': 'rmx'} <-- This works for release, but not for editable install!! (https://stackoverflow.com/a/67238346/7057866)
     package_dir={'': '.'},
-    entry_points={"console_scripts": ["rmx=rmx.cli.main:run"]},
+    entry_points={"console_scripts": ["rmx=rmx.cli:main"]},
 )

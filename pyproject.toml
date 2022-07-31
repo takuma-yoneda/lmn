@@ -1,12 +1,18 @@
 [project]
 name = "rmx"
-version = "0.0.3"
+version = "0.1.0"
 description = "Remote code deployment and execution for ML researchers."
 authors = [
-    {name = "Takuma Yoneda", email = "takuma-yoneda@users.noreply.github.com"},
     {name = "Takuma Yoneda",email = "takuma.ynd@gmail.com"}
 ]
-dependencies = ["colorlog", "docker", "fabric", "randomname", "simple_slurm_command"]
+dependencies = [
+    "colorlog",
+    "docker",
+    "fabric",
+    "randomname",
+    "simple_slurm_command",
+    "dockerpty>=0.4.1",
+]
 requires-python = ">=3.8"
 readme = "README.md"
 license = {text = "MIT License"}
@@ -20,11 +26,12 @@ classifiers = [
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
 ]
 [project.urls]
 Homepage = "https://github.com/takuma-yoneda/rmx"
 [project.scripts]
-rmx = "rmx.cli.main:run"
+rmx = "rmx.cli:main"
 
 [tool.pdm]
 package-dir = "."

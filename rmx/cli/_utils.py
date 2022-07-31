@@ -13,6 +13,9 @@ def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, trans
     else:
       target_dir: Hoge/Fuga/target-dir/content-files
     """
+    # TODO: replace with https://github.com/laktak/rsyncy (?)
+    # ^ This one supports visualizing progress bar
+
     import shutil
     exclude = [] if exclude is None else exclude
     # make sure rsync is installed

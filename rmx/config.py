@@ -1,29 +1,36 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 import os
 from os.path import expandvars
 import docker
 from rmx import logger
 
 class DockerContainerConfig:
-    def __init__(self, image, name, remove=True, network='host', ipc_mode='host', mounts=None,
-                 detach=True, tty=True, environment=None, device_requests=None, runtime='docker') -> None:
+    def __init__(self, image, name, env: dict | None = None, remove=True, network='host', ipc_mode='host', mounts=None,
+                 startup: str | None = None, detach=True, tty=True, environment=None, use_gpus=True, runtime='docker') -> None:
         self.image = image
         self.name = name
+        self.env = {} if env is None else env
         self.remove = remove
         self.network = network
         self.ipc_mode = ipc_mode
         self.mounts = [] if mounts is None else mounts
+        self.startup = startup
         self.detach = detach
         self.tty = tty
         self.environment = dict() if environment is None else environment
-        self.device_requests = [] if device_requests is None else device_requests
+        self.device_requests = []
         self.runtime = runtime
+        self.use_gpus = use_gpus
+
+        if use_gpus:
+            self.add_gpus()
 
     def __repr__(self):
         properties = {key: val for key, val in vars(self).items()}
         return repr(f'[DockerContainerConfig]\n{properties}')
 
-    def use_gpus(self):
+    def add_gpus(self):
         """Add gpus to device_requests
 
         https://github.com/docker/docker-py/issues/2395#issuecomment-907243275
@@ -60,7 +67,7 @@ class DockerContainerConfig:
         # something like: /private/tmp/com.apple.launchd.jY5AhC1lFM/org.xquartz:0
         # which doesn't work (??)
         if 'xquartz' in os.environ.get('DISPLAY', ''):
-            from rmx.cli.utils import run_cmd
+            from rmx.utils import run_cmd
             ip = run_cmd('ifconfig en0 | grep inet | awk \'$1=="inet" {print $2}\'', get_output=True, shell=True)
             display = f'{ip}:0'
         else:

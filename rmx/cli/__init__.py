@@ -1,97 +1,66 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+from rmx import __version__
+import sys
 import argparse
-import logging
-import os
-from abc import abstractmethod, ABC
-from typing import Optional, Type
-
-from rmx.types import Arguments
 
 
-class AbstractCLICommand(ABC):
+def global_parser():
+    from . import run, sync
+    commands = [run, sync]
 
-    KEY = None
-
-    @classmethod
-    def name(cls) -> str:
-        return cls.KEY
-
-    @staticmethod
-    def common_parser() -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser(add_help=False)
-        # parser.add_argument(
-        #     "-C",
-        #     "--workdir",
-        #     default=os.getcwd(),
-        #     help="Directory containing the CPK project"
-        # )
-        parser.add_argument(
-            "--image",
-            default=None,
-            help="specify docker image"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version="{} - version {}".format(
+            "RMX", __version__
         )
-        parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            default=False,
-            help="dry run"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False
+    )
+
+    # Register subparsers
+    subparsers = parser.add_subparsers()
+    name2subparser = {}
+    for cmd in commands:
+        subp = subparsers.add_parser(
+            cmd.name,
+            parents=[cmd.parser],  # HACK: this registers cmd.parser as the sub parser (https://docs.python.org/3.9/library/argparse.html#argparse.ArgumentParser)
+            description=cmd.description,
+            help=cmd.description,
+            add_help=False  # Avoid help collision
+            # formatter_class=PdmFormatter,
         )
-        parser.add_argument(
-            "-o",
-            "--outdir",
-            default=None,
-            help="output directory where generated files will be stored."
-        )
-        parser.add_argument(
-            "--verbose",
-            default=False,
-            action="store_true",
-            help="Be verbose"
-        )
-        parser.add_argument(
-            "--debug",
-            default=False,
-            action="store_true",
-            help="Enable debug mode"
-        )
-        return parser
 
-    @classmethod
-    def get_parser(cls, args: Arguments) -> argparse.ArgumentParser:
-        common_parser = cls.common_parser()
-        command_parser = cls.parser(common_parser, args)
-        command_parser.prog = f'rmx {cls.KEY}'
-        return command_parser
-
-    @staticmethod
-    @abstractmethod
-    def parser(parent: Optional[argparse.ArgumentParser] = None,
-               args: Optional[Arguments] = None) -> argparse.ArgumentParser:
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def execute(config: dict, parsed: argparse.Namespace, relative_workdir: str) -> bool:
-        pass
+        # NOTE: I don't particularly like this, but I follow how PDM handles (sub)commands.
+        # This registers cmd.handler function as args.handler and it will be called later.
+        subp.set_defaults(handler=cmd.handler)
+        name2subparser[cmd.name] = subp
+    return parser
 
 
-class RMXCLI:
+def core(args):
+    # Ensure same behavior while testing and using the CLI
+    args = args or sys.argv[1:]
 
-    @staticmethod
-    def parse_arguments(command: Type[AbstractCLICommand], args: Arguments) -> argparse.Namespace:
-        parser = command.get_parser(args)
-        parsed = parser.parse_args(args)
-        # sanitize workdir
-        parsed.workdir = os.path.abspath(parsed.workdir)
-        # enable debug
-        # if parsed.debug:
-        #     cpklogger.setLevel(logging.DEBUG)
-        # ---
-        return parsed
+    # Get parser and parse arguments
+    parser = global_parser()
+    parsed = parser.parse_args(args)
+
+    # Load config and fuse it with parsed arguments
+    from ._config_loader import load_config
+    project, machine, runtime_options = load_config(parsed)
+    parsed.handler(project, machine, runtime_options)
 
 
-__all__ = [
-    "AbstractCLICommand",
-    "RMXCLI",
-    # "cpklogger"
-]
+def main(args: list[str] | None = None) -> None:
+    """
+    Entrypoint for the CLI.
+    Arguments are only for test (it is always None if calling via CLI).
+    """
+    core(args)
