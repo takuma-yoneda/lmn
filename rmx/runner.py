@@ -85,7 +85,7 @@ class DockerRunner:
                                                 tty=True,
                                                 stdin_open=True,
                                                 mounts=d.mounts,
-                                                environment=d.environment,
+                                                environment=allenv,
                                                 device_requests=d.device_requests,
                                                 working_dir=str(self.rmxdirs.codedir / relative_workdir),
                                                 # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
@@ -100,11 +100,11 @@ class DockerRunner:
                                                 remove=d.remove,  # Keep it running as we need to change
                                                 network=d.network,
                                                 ipc_mode=d.ipc_mode,
-                                                detach=d.detach,
+                                                detach=True,
                                                 tty=d.tty,
                                                 stdin_open=True,
                                                 mounts=d.mounts,
-                                                environment=d.environment,
+                                                environment=allenv,
                                                 device_requests=d.device_requests,
                                                 working_dir=str(self.rmxdirs.codedir / relative_workdir),
                                                 # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
@@ -120,5 +120,77 @@ class DockerRunner:
 
 
 class SlurmRunner:
-    def __init__(self) -> None:
-        pass
+    """Use srun/sbatch to submit the command on a remote machine.
+    If your local machine has slurm (i.e., you're on slurm login-node), I guess you don't need this tool.
+    Thus SlurmMachine inherits SSHMachine.
+    """
+    def __init__(self, client: SimpleSSHClient, rmxdirs: Namespace) -> None:
+        self.client = client
+        self.rmxdirs = rmxdirs
+
+    def exec(self, cmd: str, relative_workdir, slurm_conf, env: dict | None = None,
+             startup: str = "", num_sequence: int = 1,
+             interactive: bool = None, dry_run: bool = False):
+        from simple_slurm_command import SlurmCommand
+        env = {} if env is None else env
+
+        if isinstance(cmd, list):
+            cmd = ' '.join(cmd)
+
+        if num_sequence > 1:
+            # Use sbatch and set dependency to singleton
+            slurm_conf.dependency = 'singleton'
+            if interactive:
+                logger.warn(f'num_sequence is set to {num_sequence} (> 1). Force disabling interactive mode')
+                interactive = False
+
+        s = slurm_conf
+        slurm_command = SlurmCommand(cpus_per_task=s.cpus_per_task,
+                                     job_name=s.job_name,
+                                     partition=s.partition,
+                                     time=s.time,
+                                     exclude=s.exclude,
+                                     constraint=s.constraint,
+                                     dependency=s.dependency,
+                                     output=s.output,
+                                     error=s.error)
+
+        if interactive and (s.output is not None):
+            # User may expect stdout shown on the console.
+            logger.info('--output/--error argument for Slurm is ignored in interactive mode.')
+
+        # Hmmmm, Fabric seems to have an issue to handle envvar that contains spaces...
+        # This is the issue of using "inline_ssh_env" that essentially sets envvars by putting bunch of export KEY=VAL before running shells.
+        # The documentation clearly says developers need to handle shell escaping for non-trivial values.
+        rmxenv = get_rmxenvs(cmd, self.rmxdirs)
+        env.update(rmxenv)
+
+        if startup:
+            cmd = f'{startup} && {cmd}'
+
+        if interactive:
+            # cmd = f'{shell} -i -c \'{cmd}\''
+            # Create a temp bash file and put it on the remote server.
+            workdir = self.rmxdirs.codedir / relative_workdir
+            logger.info('exec file: ' + f"#!/usr/bin/env {s.shell}\n{cmd}\n{s.shell}")
+            from io import StringIO
+            file_obj = StringIO(f"#!/usr/bin/env {s.shell}\n{cmd}\n{s.shell}")
+            self.client.put(file_obj, workdir / '.srun-script.sh')
+            cmd = slurm_command.srun('.srun-script.sh', pty=s.shell)
+
+            logger.info(f'srun mode:\n{cmd}')
+            logger.info(f'cd to {workdir}')
+            return self.client.run(cmd, directory=workdir,
+                                   disown=False, env=env, pty=True, dry_run=dry_run)
+        else:
+            cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {s.shell}')
+            logger.info(f'sbatch mode:\n{cmd}')
+            logger.info(f'cd to {self.rmxdirs.codedir / relative_workdir}')
+
+            cmd = '\n'.join([cmd] * num_sequence)
+            result = self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),
+                                     disown=False, env=env, dry_run=dry_run)
+            if result.stderr:
+                logger.warn('sbatch job submission failed:', result.stderr)
+            jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833
+            logger.debug(f'jobid {jobid}')

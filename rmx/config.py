@@ -7,7 +7,7 @@ from rmx import logger
 
 class DockerContainerConfig:
     def __init__(self, image, name, env: dict | None = None, remove=True, network='host', ipc_mode='host', mounts=None,
-                 startup: str | None = None, detach=True, tty=True, environment=None, use_gpus=True, runtime='docker') -> None:
+                 startup: str | None = None, tty=True, use_gpus=True, runtime='docker') -> None:
         self.image = image
         self.name = name
         self.env = {} if env is None else env
@@ -16,9 +16,7 @@ class DockerContainerConfig:
         self.ipc_mode = ipc_mode
         self.mounts = [] if mounts is None else mounts
         self.startup = startup
-        self.detach = detach
         self.tty = tty
-        self.environment = dict() if environment is None else environment
         self.device_requests = []
         self.runtime = runtime
         self.use_gpus = use_gpus
@@ -101,7 +99,9 @@ class SlurmConfig:
     """Let's keep it minimal. Conceptually it's better to store SlurmConfig here,
     but that would make it harder to read.
     """
-    def __init__(self, partition='cpu', constraint=None, cpus_per_task=1, time=None,  output=None, error=None, dependency=None, exclude=None, **kwargs) -> None:
+    def __init__(self, job_name: str, partition='cpu', constraint=None, cpus_per_task=1, time=None,  
+                 output=None, error=None, dependency=None, exclude=None, shell='bash', **kwargs) -> None:
+        self.job_name = job_name
         self.partition = partition
         self.constraint = constraint
         self.exclude = exclude
@@ -110,7 +110,21 @@ class SlurmConfig:
         self.dependency = dependency
         self.output = output
         self.error = error
+        self.shell = shell
 
 
 class SingularityConfig:
-    pass
+    def __init__(self, image, env: dict | None = None, network='host', ipc_mode='host', mounts=None,
+                 startup: str | None = None, tty=True, use_gpus=True, runtime='docker') -> None:
+        self.image = image
+        self.name = name
+        self.env = {} if env is None else env
+        self.remove = remove
+        self.network = network
+        self.ipc_mode = ipc_mode
+        self.mounts = [] if mounts is None else mounts
+        self.startup = startup
+        self.tty = tty
+        self.device_requests = []
+        self.runtime = runtime
+        self.use_gpus = use_gpus

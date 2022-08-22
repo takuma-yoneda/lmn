@@ -1,4 +1,9 @@
 from argparse import ArgumentParser
+from rmx import logger
+from rmx.config import SlurmConfig
+from rmx.machine import SimpleSSHClient
+
+from rmx.runner import SlurmRunner
 from .sync import _sync_output, _sync_code
 
 
@@ -22,12 +27,17 @@ def _get_parser() -> ArgumentParser:
         help="specify docker image"
     )
     parser.add_argument(
+        "--name",
+        default=None,
+        help="specify docker container name"
+    )
+    parser.add_argument(
         "-m",
         "--mode",
         action="store",
         type=str,
         default=None,
-        choices=["ssh", "docker", "slurm", "singularity", "sing-slurm"],
+        choices=["ssh", "docker", "slurm", "singularity", "slurm-sing"],
         help="What mode to run",
     )
     parser.add_argument(
@@ -59,6 +69,12 @@ def _get_parser() -> ArgumentParser:
                 "Temporarily only available for slurm mode."
     )
     parser.add_argument(
+        "--num_sequence",
+        action="store",
+        type=int,
+        help="(For slurm) number of repetitions for a sequential job."
+    )
+    parser.add_argument(
         "remote_command",
         default=False,
         action="store",
@@ -68,10 +84,11 @@ def _get_parser() -> ArgumentParser:
     )
     return parser
 
+from ._config_loader import Machine
 
-def handler(project, machine, runtime_options):
-    print(f'handling command for {__file__}')
-    print('options', runtime_options)
+def handler(project, machine: Machine, runtime_options):
+    logger.info(f'handling command for {__file__}')
+    logger.info(f'options: {runtime_options}')
 
     # Sync code first
     _sync_code(project, machine, runtime_options)
@@ -80,10 +97,11 @@ def handler(project, machine, runtime_options):
     env = {**project.env, **machine.env}
 
     rmxdirs = machine.get_rmxdirs(project.name)
-    startup = '&&'.join([e for e in [machine.startup, project.startup] if e.strip() == ""])
+    startup = '&&'.join([e for e in [machine.startup, project.startup] if e.strip() != ""])
     if machine.mode == 'ssh':
         from rmx.runner import SSHRunner
-        ssh_runner = SSHRunner(client, rmxdirs)
+        ssh_client = SimpleSSHClient(machine.remote_conf)
+        ssh_runner = SSHRunner(ssh_client, rmxdirs)
         ssh_runner.exec(runtime_options.cmd, 
                         runtime_options.rel_workdir,
                         startup=startup,
@@ -91,7 +109,7 @@ def handler(project, machine, runtime_options):
                         dry_run=runtime_options.dry_run)
 
     elif machine.mode == 'docker':
-        from docker import DockerClient, APIClient
+        from docker import DockerClient
         from rmx.runner import DockerRunner
         from rmx.config import DockerContainerConfig
         base_url = "ssh://" + machine.base_uri
@@ -126,66 +144,80 @@ def handler(project, machine, runtime_options):
                    Mount(target=docker_rmxdirs.mountdir, source=rmxdirs.mountdir, type='bind')]
         mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
 
+        name = f'{machine.user}-rmx-{project.name}'
+        if runtime_options.name is not None:
+            name = f'{name} {runtime_options.name}'
+
         docker_conf = DockerContainerConfig(
             image=machine.docker.image,
-            name=f'{machine.user}-rmx-{project.name}',
+            name=name,
             mounts=mounts,
             env=env
         )
 
-        
         docker_runner = DockerRunner(client, docker_rmxdirs)
         docker_runner.exec(runtime_options.cmd,
                            runtime_options.rel_workdir,
-                           docker_conf)
-    
+                           docker_conf,
+                           interactive=not runtime_options.disown)
 
 
-    elif machine.mode == "slurm":
-        raise NotImplementedError('not refactored yet!')
+    elif machine.mode == "slurm" or machine.mode == 'slurm-sing':
+        # logger.info(f'slurm_conf: {machine.sconf}')
+        ssh_client = SimpleSSHClient(machine.remote_conf)
+        slurm_runner = SlurmRunner(ssh_client, rmxdirs)
+        run_opt = runtime_options
 
-        from rmx.config import SlurmConfig
-        from rmx.machine import SlurmMachine
+        if machine.mode == 'slurm-sing':
+            # Decorate run_opt.cmd for singularity
+            sing_rmxdirs = machine.sing.get_rmxdirs(project.name)  # TODO: Implement it
 
-        # TODO: Also parse from slurm config options (aside from default)
-        # Parse slurm configuration
-        if parsed.conf:
-            sconf = config['slurm-configs'].get(parsed.conf)
-            if sconf is None:
-                raise KeyError(f'configuration: {parsed.con} cannot be found in "slurm-configs".')
-        else:
-            sconf = machine_conf.get('slurm')
+            sing_cmd = 'singularity run --nv --containall {options} {sif_file} {cmd}'
+            options = []
 
-        slurm_conf = SlurmConfig(**sconf)
-        logger.info(f'slurm_conf: {slurm_conf}')
+            # Bind
+            bind = '-B {source}:{target}'
+            options += [bind.format(target=sing_rmxdirs.codedir, source=rmxdirs.codedir),
+                      bind.format(target=sing_rmxdirs.outdir, source=rmxdirs.outdir),
+                      bind.format(target=sing_rmxdirs.mountdir, source=rmxdirs.mountdir)]
+            options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
 
-        slurm_machine = SlurmMachine(ssh_client, project, slurm_conf)
+            # Overlay
+            if machine.sing.overlay:
+                options += [f'--overlay {machine.sing.overlay}']
 
-        if parsed.sweep:
-            assert parsed.disown, "You must set -d option to use sweep functionality."
+            # Overwrite command
+            options = ' '.join(options)
+            run_opt.cmd = sing_cmd.format(options=options, sif_file=machine.sing.image, cmd=run_opt.cmd)
+
+        if run_opt.sweep:
+            assert run_opt.disown, "You must set -d option to use sweep functionality."
             # Parse input
             # format #0: 8 --> 8
             # format #1: 1-10 --> range(1, 10)
             # format #2: 1,2,7 --> [1, 2, 7]
-            if '-' in parsed.sweep:
+            if '-' in run_opt.sweep:
                 # format #1
-                begin, end = [int(val) for val in parsed.sweep.split('-')]
+                begin, end = [int(val) for val in run_opt.sweep.split('-')]
                 assert begin < end
                 sweep_ind = range(begin, end)
-            elif ',' in parsed.sweep:
-                sweep_ind = [int(e) for e in parsed.sweep.strip().split(',')]
-            elif parsed.sweep.isnumeric():
-                sweep_ind = [int(parsed.sweep)]
+            elif ',' in run_opt.sweep:
+                sweep_ind = [int(e) for e in run_opt.sweep.strip().split(',')]
+            elif run_opt.sweep.isnumeric():
+                sweep_ind = [int(run_opt.sweep)]
             else:
                 raise KeyError("Format for --sweep option is not recognizable. Format examples: '1-10', '8', '1,2,7'.")
 
             for sweep_idx in sweep_ind:
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
-                slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
-                                        interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run, sweeping=True)
+                slurm_runner.execute(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf, 
+                                     startup=startup,
+                                      interactive=False, num_sequence=run_opt.num_sequence, 
+                                      env=env, dry_run=run_opt.dry_run, sweeping=True)
         else:
-            slurm_machine.execute(parsed.remote_command, relative_workdir, startup=machine_conf.get('startup'),
-                                    interactive=not parsed.disown, num_sequence=parsed.num_sequence, env=env, dry_run=parsed.dry_run)
+            slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf,
+                              startup=startup, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
+                              env=env, dry_run=run_opt.dry_run)
 
     # Sync output files
     _sync_output(project, machine, runtime_options)
