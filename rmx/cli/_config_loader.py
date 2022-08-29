@@ -121,6 +121,7 @@ def load_config(parsed):
     config = parse_config(proj_rootdir)
 
     pconfig = config.get('project', {})
+    mconf = config['machines'].get(parsed.machine)
 
     name = pconfig.get('name', proj_rootdir.stem)
     logger.info(f'Project name: {name}')
@@ -143,15 +144,23 @@ def load_config(parsed):
                                 sweep=parsed.sweep,
                                 num_sequence=parsed.num_sequence)
 
+    mount_dirs = pconfig.get('mount', []),
+    mount_from_host = pconfig.get('mount_from_host', {})
+
+    if 'mount' in mconf:
+        mount_dirs = mconf.get('mount', [])
+    if 'mount_from_host' in mconf:
+        mount_from_host = mconf.get('mount_from_host', {})
+
+
     project = Project(name,
                       proj_rootdir,
                       outdir=pconfig.get('outdir'),
                       exclude=pconfig.get('exclude', []),
                       startup=pconfig.get('startup', ""),
                       env=pconfig.get('environment', {}),
-                      mount_dirs=pconfig.get('mounts', []),
-                      mount_from_host=pconfig.get('mount_from_host', {})
-                      )
+                      mount_dirs=mount_dirs,
+                      mount_from_host=mount_from_host)
 
     
     if parsed.machine not in config['machines']:
@@ -159,7 +168,6 @@ def load_config(parsed):
             f'Machine "{parsed.machine}" not found in the configuration. '
             f'Available machines are: {" ".join(config["machines"].keys())}'
         )
-    mconf = config['machines'].get(parsed.machine)
     user, host = mconf['user'], mconf['host']
     remote_conf = RemoteConfig(user, host)
     mode = parsed.mode or mconf.get('default_mode')

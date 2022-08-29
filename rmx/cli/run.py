@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from rmx import logger
 from rmx.config import SlurmConfig
+from rmx.helpers import replace_rmx_envvars
 from rmx.machine import SimpleSSHClient
 
 from rmx.runner import SlurmRunner
@@ -170,9 +171,19 @@ def handler(project, machine: Machine, runtime_options):
 
         if machine.mode == 'slurm-sing':
             # Decorate run_opt.cmd for singularity
-            sing_rmxdirs = machine.sing.get_rmxdirs(project.name)  # TODO: Implement it
 
-            sing_cmd = 'singularity run --nv --containall {options} {sif_file} {cmd}'
+            # Overwrite rmx envvars.  Hmm I don't like this...
+            sing_rmxdirs = machine.sing.get_rmxdirs(project.name)
+            env.update({
+                'RMX_CODE_DIR': sing_rmxdirs.codedir, 
+                'RMX_MOUNT_DIR': sing_rmxdirs.mountdir,
+                'RMX_OUTPUT_DIR': sing_rmxdirs.outdir
+            })
+
+            # NOTE: Without --containall, nvidia-smi command fails with "couldn't find libnvidia-ml.so library in your system."
+            # NOTE: Without bash -c '{cmd}', if you put PYTHONPATH=/foo/bar, it fails with no such file or directory 'PYTHONPATH=/foo/bar'
+            # TODO: Will the envvars be taken over to the internal shell (by this extra bash command)?
+            sing_cmd = "singularity run --nv --containall {options} {sif_file} bash -c '{cmd}'"
             options = []
 
             # Bind
@@ -185,6 +196,14 @@ def handler(project, machine: Machine, runtime_options):
             # Overlay
             if machine.sing.overlay:
                 options += [f'--overlay {machine.sing.overlay}']
+
+            # TODO: This CANNOT set RMX_RUN_SWEEP_IDX !!
+            # Environment variables
+            options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
+
+            # Workdir
+            _workdir = sing_rmxdirs.codedir / runtime_options.rel_workdir
+            options += [f'--pwd {_workdir}']
 
             # Overwrite command
             options = ' '.join(options)
@@ -210,10 +229,10 @@ def handler(project, machine: Machine, runtime_options):
 
             for sweep_idx in sweep_ind:
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
-                slurm_runner.execute(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf, 
-                                     startup=startup,
-                                      interactive=False, num_sequence=run_opt.num_sequence, 
-                                      env=env, dry_run=run_opt.dry_run, sweeping=True)
+                slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf, 
+                                  startup=startup,
+                                  interactive=False, num_sequence=run_opt.num_sequence,
+                                  env=env, dry_run=run_opt.dry_run, sweeping=True)
         else:
             slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf,
                               startup=startup, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
