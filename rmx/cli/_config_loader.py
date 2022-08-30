@@ -144,7 +144,7 @@ def load_config(parsed):
                                 sweep=parsed.sweep,
                                 num_sequence=parsed.num_sequence)
 
-    mount_dirs = pconfig.get('mount', []),
+    mount_dirs = pconfig.get('mount', [])
     mount_from_host = pconfig.get('mount_from_host', {})
 
     if 'mount' in mconf:
