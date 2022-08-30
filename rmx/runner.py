@@ -41,7 +41,7 @@ class DockerRunner:
         self.rmxdirs = rmxdirs
 
     def exec(self, cmd: str, relative_workdir, docker_conf: DockerContainerConfig,
-             kill_existing_container: bool = True, interactive: bool = True) -> None:
+             kill_existing_container: bool = True, interactive: bool = True, quiet: bool = False) -> None:
         from rmx.helpers import replace_rmx_envvars
 
         rmxenv = get_rmxenvs(cmd, self.rmxdirs)
@@ -110,13 +110,14 @@ class DockerRunner:
                                                 # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
                                                 )
             logger.info(f'container: {container}')
-            # Block and listen to the stream from container
-            stream = container.logs(stream=True, follow=True)
-            logger.info('--- listening container stdout/stderr ---\n')
-            for char in stream:
-                # logger.info(char.decode('utf-8'))
-                # 'ignore' ignores decode error that happens when multi-byte char is passed.
-                print(char.decode('utf-8', 'ignore'), end='')
+            if not quiet:
+                # Block and listen to the stream from container
+                stream = container.logs(stream=True, follow=True)
+                logger.info('--- listening container stdout/stderr ---\n')
+                for char in stream:
+                    # logger.info(char.decode('utf-8'))
+                    # 'ignore' ignores decode error that happens when multi-byte char is passed.
+                    print(char.decode('utf-8', 'ignore'), end='')
 
 
 class SlurmRunner:

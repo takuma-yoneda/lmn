@@ -87,6 +87,27 @@ def _get_parser() -> ArgumentParser:
 
 from ._config_loader import Machine
 
+
+def parse_sweep_idx(sweep_str):
+    # Parse input
+    # format #0: 8 --> 8
+    # format #1: 1-10 --> range(1, 10)
+    # format #2: 1,2,7 --> [1, 2, 7]
+    if '-' in sweep_str:
+        # format #1
+        begin, end = [int(val) for val in sweep_str.split('-')]
+        assert begin < end
+        sweep_ind = range(begin, end)
+    elif ',' in sweep_str:
+        sweep_ind = [int(e) for e in sweep_str.strip().split(',')]
+    elif sweep_str.isnumeric():
+        sweep_ind = [int(sweep_str)]
+    else:
+        raise KeyError("Format for --sweep option is not recognizable. Format examples: '1-10', '8', '1,2,7'.")
+
+    return sweep_ind
+
+
 def handler(project, machine: Machine, runtime_options):
     logger.info(f'handling command for {__file__}')
     logger.info(f'options: {runtime_options}')
@@ -147,20 +168,38 @@ def handler(project, machine: Machine, runtime_options):
 
         name = f'{machine.user}-rmx-{project.name}'
         if runtime_options.name is not None:
-            name = f'{name} {runtime_options.name}'
-
-        docker_conf = DockerContainerConfig(
-            image=machine.docker.image,
-            name=name,
-            mounts=mounts,
-            env=env
-        )
+            name = f'{name}--{runtime_options.name}'
 
         docker_runner = DockerRunner(client, docker_rmxdirs)
-        docker_runner.exec(runtime_options.cmd,
-                           runtime_options.rel_workdir,
-                           docker_conf,
-                           interactive=not runtime_options.disown)
+
+        if runtime_options.sweep:
+            assert runtime_options.disown, "You must set -d option to use sweep functionality."
+            sweep_ind = parse_sweep_idx(runtime_options.sweep)
+
+            for sweep_idx in sweep_ind:
+                env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
+                docker_conf = DockerContainerConfig(
+                    image=machine.docker.image,
+                    name=f'{name}-{sweep_idx}',
+                    mounts=mounts,
+                    env=env
+                )
+                docker_runner.exec(runtime_options.cmd,
+                                   runtime_options.rel_workdir,
+                                   docker_conf,
+                                   interactive=False,
+                                   quiet=True)
+        else:
+            docker_conf = DockerContainerConfig(
+                image=machine.docker.image,
+                name=name,
+                mounts=mounts,
+                env=env
+            )
+            docker_runner.exec(runtime_options.cmd,
+                            runtime_options.rel_workdir,
+                            docker_conf,
+                            interactive=not runtime_options.disown)
 
 
     elif machine.mode == "slurm" or machine.mode == 'slurm-sing':
@@ -197,6 +236,10 @@ def handler(project, machine: Machine, runtime_options):
             if machine.sing.overlay:
                 options += [f'--overlay {machine.sing.overlay}']
 
+            # TEMP:
+            assert 'CUDA_VISIBLE_DEVICES' not in env, 'CUDA_VISIBLE_DEVICES will be automatically set. You should not specify it manually.'
+            env['CUDA_VISIBLE_DEVICES'] = '$CUDA_VISIBLE_DEVICES'  # This let Singularity container use the envvar on the host
+
             # TODO: This CANNOT set RMX_RUN_SWEEP_IDX !!
             # Environment variables
             options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
@@ -211,28 +254,14 @@ def handler(project, machine: Machine, runtime_options):
 
         if run_opt.sweep:
             assert run_opt.disown, "You must set -d option to use sweep functionality."
-            # Parse input
-            # format #0: 8 --> 8
-            # format #1: 1-10 --> range(1, 10)
-            # format #2: 1,2,7 --> [1, 2, 7]
-            if '-' in run_opt.sweep:
-                # format #1
-                begin, end = [int(val) for val in run_opt.sweep.split('-')]
-                assert begin < end
-                sweep_ind = range(begin, end)
-            elif ',' in run_opt.sweep:
-                sweep_ind = [int(e) for e in run_opt.sweep.strip().split(',')]
-            elif run_opt.sweep.isnumeric():
-                sweep_ind = [int(run_opt.sweep)]
-            else:
-                raise KeyError("Format for --sweep option is not recognizable. Format examples: '1-10', '8', '1,2,7'.")
+            sweep_ind = parse_sweep_idx(run_opt.sweep)
 
             for sweep_idx in sweep_ind:
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
                 slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf, 
                                   startup=startup,
                                   interactive=False, num_sequence=run_opt.num_sequence,
-                                  env=env, dry_run=run_opt.dry_run, sweeping=True)
+                                  env=env, dry_run=run_opt.dry_run)
         else:
             slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf,
                               startup=startup, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
