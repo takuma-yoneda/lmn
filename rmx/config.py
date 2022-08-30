@@ -114,8 +114,7 @@ class SlurmConfig:
 
 
 class SingularityConfig:
-    def __init__(self, image, env: dict | None = None, network='host', ipc_mode='host', mounts=None,
-                 startup: str | None = None, tty=True, use_gpus=True, runtime='docker') -> None:
+    def __init__(self, image, env: dict | None = None, network='host', ipc_mode='host', mounts=None) -> None:
         self.image = image
         self.name = name
         self.env = {} if env is None else env
