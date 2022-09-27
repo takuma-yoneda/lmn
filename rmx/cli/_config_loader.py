@@ -142,7 +142,8 @@ def load_config(parsed):
                                 disown=parsed.disown,
                                 name=parsed.name,
                                 sweep=parsed.sweep,
-                                num_sequence=parsed.num_sequence)
+                                num_sequence=parsed.num_sequence,
+                                force=parsed.force)
 
     mount_dirs = pconfig.get('mount', [])
     mount_from_host = pconfig.get('mount_from_host', {})

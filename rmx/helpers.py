@@ -7,6 +7,9 @@ from typing import Iterator
 def is_system_root(directory: Path):
     return directory == directory.parent
 
+def is_home_dir(directory: Path):
+    return directory.resolve() == Path.home().resolve()
+
 def yield_parents(directory: Path, max_depth=None) -> Iterator[Path]:
     """generator returning the the current directory and ancestors one after another"""
     max_depth = 999 if max_depth is None else max_depth
@@ -49,7 +52,8 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.rmx.config', '${HOME
     2. $HOME/.rmx.config
     3. $HOME/.config/rmx
     """
-    import json
+    import pyjson5 as json
+
     from os.path import expandvars, isfile
     from rmx import logger
 
@@ -120,6 +124,7 @@ def find_project_root():
                 'Setting project root to current directory')
 
     assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."
+    assert not is_home_dir(current_dir), "project root detected is home directory. You never want to rsync the entire home directory to a remote machine."
     return current_dir
 
 
@@ -186,7 +191,7 @@ class LaunchLogManager:
         self.path = path
 
     def _refresh(self):
-        import json
+        import pyjson5 as json
         from datetime import datetime
         # Read entries from the top (oldest) to bottom (newest)
         with open(self.path, 'r') as f:

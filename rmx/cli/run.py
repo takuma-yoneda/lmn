@@ -48,6 +48,12 @@ def _get_parser() -> ArgumentParser:
         help="Do not block to wait for the process to exit. stdout/stderr will not be shown with this option.",
     )
     parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="When a job with the same name already exists, kill it and run the new one (only for Docker mode)",
+    )
+    parser.add_argument(
         "-X",
         "--x-forward",
         action="store_true",
@@ -138,6 +144,11 @@ def handler(project, machine: Machine, runtime_options):
         # client = DockerClient(base_url=base_url, use_ssh_client=True)
         client = DockerClient(base_url=base_url)  # dockerpty hangs with use_ssh_client=True
 
+        # Specify job name
+        name = f'{machine.user}-rmx-{project.name}'
+        if runtime_options.name is not None:
+            name = f'{name}--{runtime_options.name}'
+
         if runtime_options.dry_run:
             raise ValueError('dry run is not yet supported for Docker mode')
         
@@ -166,9 +177,6 @@ def handler(project, machine: Machine, runtime_options):
                    Mount(target=docker_rmxdirs.mountdir, source=rmxdirs.mountdir, type='bind')]
         mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
 
-        name = f'{machine.user}-rmx-{project.name}'
-        if runtime_options.name is not None:
-            name = f'{name}--{runtime_options.name}'
 
         docker_runner = DockerRunner(client, docker_rmxdirs)
 
@@ -188,6 +196,7 @@ def handler(project, machine: Machine, runtime_options):
                                    runtime_options.rel_workdir,
                                    docker_conf,
                                    interactive=False,
+                                   kill_existing_container=runtime_options.force,
                                    quiet=True)
         else:
             docker_conf = DockerContainerConfig(
@@ -197,9 +206,10 @@ def handler(project, machine: Machine, runtime_options):
                 env=env
             )
             docker_runner.exec(runtime_options.cmd,
-                            runtime_options.rel_workdir,
-                            docker_conf,
-                            interactive=not runtime_options.disown)
+                               runtime_options.rel_workdir,
+                               docker_conf,
+                               interactive=not runtime_options.disown,
+                               kill_existing_container=runtime_options.force)
 
 
     elif machine.mode == "slurm" or machine.mode == 'slurm-sing':
@@ -207,6 +217,12 @@ def handler(project, machine: Machine, runtime_options):
         ssh_client = SimpleSSHClient(machine.remote_conf)
         slurm_runner = SlurmRunner(ssh_client, rmxdirs)
         run_opt = runtime_options
+
+        # Specify job name
+        name = f'{machine.user}-rmx-{project.name}'
+        if runtime_options.name is not None:
+            name = f'{name}--{runtime_options.name}'
+        machine.slurm_conf.job_name = name
 
         if machine.mode == 'slurm-sing':
             # Decorate run_opt.cmd for singularity
