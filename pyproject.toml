@@ -1,6 +1,6 @@
 [project]
 name = "rmx"
-version = "0.1.0"
+version = "0.1.2"
 description = "Remote code deployment and execution for ML researchers."
 authors = [
     {name = "Takuma Yoneda", email = "takuma-yoneda@users.noreply.github.com"},
