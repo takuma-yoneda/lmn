@@ -181,7 +181,7 @@ def load_config(parsed):
         mode = 'ssh'
     elif mode == 'docker':
         # Docker specific configurations
-        image = parsed.image or mconf.get('docker', {}).get('name')
+        image = parsed.image or mconf.get('docker', {}).get('image')
         if image is None:
             raise KeyError('docker image is not specified.')
         docker = Docker(image=image, rmxdir=DOCKER_ROOT_DIR)
