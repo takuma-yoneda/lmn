@@ -29,7 +29,7 @@ class SSHRunner:
 
         logger.info(f'ssh run with command: {cmd}')
         logger.info(f'cd to {self.rmxdirs.codedir / relative_workdir}')
-        rmxenv = get_rmxenvs(self.rmxdirs, cmd)
+        rmxenv = get_rmxenvs(cmd, self.rmxdirs)
         env.update(rmxenv)
         return self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),
                                disown=disown, env=env, dry_run=dry_run, pty=True)
