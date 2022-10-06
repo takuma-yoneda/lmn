@@ -143,6 +143,7 @@ def load_config(parsed):
                                 name=parsed.name,
                                 sweep=parsed.sweep,
                                 num_sequence=parsed.num_sequence,
+                                no_sync=parsed.no_sync,
                                 force=parsed.force)
 
     mount_dirs = pconfig.get('mount', [])
@@ -210,7 +211,7 @@ def load_config(parsed):
 
     machine = Machine(remote_conf,
                       mode=mode,
-                      rmxdir=mconf.get('root_dir', REMOTE_ROOT_DIR),
+                      rmxdir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}'),
                       env=mconf.get('environment'),
                       docker_conf=docker,
                       sing_conf=sing,

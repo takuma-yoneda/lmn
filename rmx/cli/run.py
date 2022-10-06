@@ -60,6 +60,11 @@ def _get_parser() -> ArgumentParser:
         help="X11 forwarding",
     )
     parser.add_argument(
+        "--no-sync",
+        action="store_true",
+        help="Do not perform rsync. This means your local files will not be synced with remote server.",
+    )
+    parser.add_argument(
         "-n",
         "--num-sequence",
         action="store",
@@ -118,8 +123,12 @@ def handler(project, machine: Machine, runtime_options):
     logger.info(f'handling command for {__file__}')
     logger.info(f'options: {runtime_options}')
 
+    if runtime_options.no_sync:
+        logger.warn('--no-sync option is True, local files will not be synced.')
+
     # Sync code first
-    _sync_code(project, machine, runtime_options)
+    if not runtime_options.no_sync:
+        _sync_code(project, machine, runtime_options)
 
     # TODO: Collect all envvars!!
     env = {**project.env, **machine.env}
@@ -284,7 +293,8 @@ def handler(project, machine: Machine, runtime_options):
                               env=env, dry_run=run_opt.dry_run)
 
     # Sync output files
-    _sync_output(project, machine, runtime_options)
+    if not runtime_options.no_sync:
+        _sync_output(project, machine, runtime_options)
 
 name = 'run'
 description = 'run command'
