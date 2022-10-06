@@ -156,7 +156,7 @@ def load_config(parsed):
         mount_from_host = mconf.get('mount_from_host', {})
 
     # Load extra env vars from .env.secret
-    env = {**pconfig.get('environment', {}), **dotenv_values(".env.secret")}
+    env = {**pconfig.get('environment', {}), **dotenv_values((proj_rootdir / ".env.secret").resolve())}
     project = Project(name,
                       proj_rootdir,
                       outdir=pconfig.get('outdir'),
