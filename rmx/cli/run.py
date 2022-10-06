@@ -130,9 +130,7 @@ def handler(project, machine: Machine, runtime_options):
     if not runtime_options.no_sync:
         _sync_code(project, machine, runtime_options)
 
-    # TODO: Collect all envvars!!
     env = {**project.env, **machine.env}
-
     rmxdirs = machine.get_rmxdirs(project.name)
     startup = '&&'.join([e for e in [machine.startup, project.startup] if e.strip() != ""])
     if machine.mode == 'ssh':
@@ -181,9 +179,13 @@ def handler(project, machine: Machine, runtime_options):
         # remote_outdir = remote_rootdir / 'output'
         # remote_mountdir = remote_rootdir / 'mount'
         docker_rmxdirs = machine.docker.get_rmxdirs(project.name)
-        mounts = [Mount(target=docker_rmxdirs.codedir, source=rmxdirs.codedir, type='bind'),
-                   Mount(target=docker_rmxdirs.outdir, source=rmxdirs.outdir, type='bind'),
-                   Mount(target=docker_rmxdirs.mountdir, source=rmxdirs.mountdir, type='bind')]
+
+        if not runtime_options.no_sync:
+            mounts = [Mount(target=docker_rmxdirs.codedir, source=rmxdirs.codedir, type='bind'),
+                    Mount(target=docker_rmxdirs.outdir, source=rmxdirs.outdir, type='bind'),
+                    Mount(target=docker_rmxdirs.mountdir, source=rmxdirs.mountdir, type='bind')]
+        else:
+            mounts = []
         mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
 
 
@@ -252,9 +254,10 @@ def handler(project, machine: Machine, runtime_options):
 
             # Bind
             bind = '-B {source}:{target}'
-            options += [bind.format(target=sing_rmxdirs.codedir, source=rmxdirs.codedir),
-                      bind.format(target=sing_rmxdirs.outdir, source=rmxdirs.outdir),
-                      bind.format(target=sing_rmxdirs.mountdir, source=rmxdirs.mountdir)]
+            if not runtime_options.no_sync:
+                options += [bind.format(target=sing_rmxdirs.codedir, source=rmxdirs.codedir),
+                        bind.format(target=sing_rmxdirs.outdir, source=rmxdirs.outdir),
+                        bind.format(target=sing_rmxdirs.mountdir, source=rmxdirs.mountdir)]
             options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
 
             # Overlay

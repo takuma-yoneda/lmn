@@ -7,6 +7,7 @@ from pathlib import Path
 from rmx import logger
 from rmx.helpers import find_project_root, parse_config
 from posixpath import expandvars
+from dotenv import dotenv_values
 
 from rmx.machine import RemoteConfig
 
@@ -154,13 +155,14 @@ def load_config(parsed):
     if 'mount_from_host' in mconf:
         mount_from_host = mconf.get('mount_from_host', {})
 
-
+    # Load extra env vars from .env.secret
+    env = {**pconfig.get('environment', {}), **dotenv_values(".env.secret")}
     project = Project(name,
                       proj_rootdir,
                       outdir=pconfig.get('outdir'),
                       exclude=pconfig.get('exclude', []),
                       startup=pconfig.get('startup', ""),
-                      env=pconfig.get('environment', {}),
+                      env=env,
                       mount_dirs=mount_dirs,
                       mount_from_host=mount_from_host)
 

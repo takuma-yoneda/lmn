@@ -30,7 +30,7 @@ setup(
         "Operating System :: MacOS",
         "Operating System :: Unix",
     ],
-    install_requires=["fabric", "docker", "randomname", "colorlog", "simple_slurm_command", "dockerpty", "pyjson5"],
+    install_requires=["fabric", "docker", "randomname", "colorlog", "simple_slurm_command", "dockerpty", "pyjson5", "python-dotenv"],
     # extras_require={
     #     "lint": [
     #         "black>=19.10b0,<=20.8",
