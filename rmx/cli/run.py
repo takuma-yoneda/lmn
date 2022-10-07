@@ -1,7 +1,13 @@
+from copy import deepcopy
+import os
+import pathlib
 from argparse import ArgumentParser
+from argparse import Namespace
 from rmx import logger
+from rmx.helpers import find_project_root
 from rmx.config import SlurmConfig
 from rmx.helpers import replace_rmx_envvars
+from rmx.cli._config_loader import Project, Machine
 from rmx.machine import SimpleSSHClient
 
 from rmx.runner import SlurmRunner
@@ -119,21 +125,50 @@ def parse_sweep_idx(sweep_str):
     return sweep_ind
 
 
-def handler(project, machine: Machine, runtime_options):
+def handler(project: Project, machine: Machine, parsed: Namespace):
     logger.info(f'handling command for {__file__}')
-    logger.info(f'options: {runtime_options}')
+    logger.info(f'parsed: {parsed}')
 
-    if runtime_options.no_sync:
-        logger.warn('--no-sync option is True, local files will not be synced.')
+    # Runtime info
+    curr_dir = pathlib.Path(os.getcwd()).resolve()
+    proj_rootdir = find_project_root()
+    rel_workdir = curr_dir.relative_to(proj_rootdir)
+    logger.info(f'relative working dir: {rel_workdir}')  # cwd.relative_to(project_root)
+    if isinstance(parsed.remote_command, list):
+        cmd = ' '.join(parsed.remote_command)
+    else:
+        cmd = parsed.remote_command
+
+    runtime_options = Namespace(dry_run=parsed.dry_run,
+                                cmd=cmd,
+                                rel_workdir=rel_workdir,
+                                disown=parsed.disown,
+                                name=parsed.name,
+                                sweep=parsed.sweep,
+                                num_sequence=parsed.num_sequence,
+                                no_sync=parsed.no_sync,
+                                force=parsed.force)
 
     # Sync code first
-    if not runtime_options.no_sync:
-        _sync_code(project, machine, runtime_options)
+    if parsed.no_sync:
+        logger.warn('--no-sync option is True, local files will not be synced.')
+
+    if not parsed.no_sync:
+        _sync_code(project, machine, runtime_options.dry_run)
 
     env = {**project.env, **machine.env}
     rmxdirs = machine.get_rmxdirs(project.name)
+
+    # TODO: This should come later
     startup = '&&'.join([e for e in [machine.startup, project.startup] if e.strip() != ""])
-    if machine.mode == 'ssh':
+
+    if parsed.mode is None:
+        logger.warn('mode is not set. Setting it to SSH mode')
+        mode = 'ssh'
+    else:
+        mode = parsed.mode
+
+    if mode == 'ssh':
         from rmx.runner import SSHRunner
         ssh_client = SimpleSSHClient(machine.remote_conf)
         ssh_runner = SSHRunner(ssh_client, rmxdirs)
@@ -143,7 +178,7 @@ def handler(project, machine: Machine, runtime_options):
                         env=env,
                         dry_run=runtime_options.dry_run)
 
-    elif machine.mode == 'docker':
+    elif mode == 'docker':
         from docker import DockerClient
         from rmx.runner import DockerRunner
         from rmx.config import DockerContainerConfig
@@ -158,27 +193,10 @@ def handler(project, machine: Machine, runtime_options):
 
         if runtime_options.dry_run:
             raise ValueError('dry run is not yet supported for Docker mode')
-        
-        # TODO: This looks horrible. Clean up.
-        # If args.image is given, look for the corresponding name in config
-        # if not found, regard it as a full name of the image
-        # NOTE: Currently it only parses image name !!!
-        # if parsed.image:
-        #     if parsed.image in config['docker-images']:
-        #         image = config['docker-images'].get(parsed.image).get('name')
-        #     else:
-        #         image = parsed.image
-        # else:
-        #     image = machine_conf.get('docker').get('name')
-        # if image is None:
-        #     raise RuntimeError("docker image cannot be parsed. Something may be wrong with your docker configuration?")
 
         from docker.types import Mount
-        # remote_rootdir = machine.rmxdir / project.name
-        # remote_dir = remote_rootdir / 'code'
-        # remote_outdir = remote_rootdir / 'output'
-        # remote_mountdir = remote_rootdir / 'mount'
-        docker_rmxdirs = machine.docker.get_rmxdirs(project.name)
+        from rmx.cli._config_loader import DOCKER_ROOT_DIR, get_docker_rmxdirs
+        docker_rmxdirs = get_docker_rmxdirs(DOCKER_ROOT_DIR, project.name)
 
         if not runtime_options.no_sync:
             mounts = [Mount(target=docker_rmxdirs.codedir, source=rmxdirs.codedir, type='bind'),
@@ -188,8 +206,12 @@ def handler(project, machine: Machine, runtime_options):
             mounts = []
         mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
 
-
         docker_runner = DockerRunner(client, docker_rmxdirs)
+
+        # Docker specific configurations
+        image = parsed.image or machine.parsed_conf.get('docker', {}).get('image')
+        if image is None:
+            raise KeyError('docker image is not specified.')
 
         if runtime_options.sweep:
             assert runtime_options.disown, "You must set -d option to use sweep functionality."
@@ -198,7 +220,7 @@ def handler(project, machine: Machine, runtime_options):
             for sweep_idx in sweep_ind:
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
                 docker_conf = DockerContainerConfig(
-                    image=machine.docker.image,
+                    image=image,
                     name=f'{name}-{sweep_idx}',
                     mounts=mounts,
                     env=env
@@ -211,7 +233,7 @@ def handler(project, machine: Machine, runtime_options):
                                    quiet=True)
         else:
             docker_conf = DockerContainerConfig(
-                image=machine.docker.image,
+                image=image,
                 name=name,
                 mounts=mounts,
                 env=env
@@ -223,7 +245,19 @@ def handler(project, machine: Machine, runtime_options):
                                kill_existing_container=runtime_options.force)
 
 
-    elif machine.mode == "slurm" or machine.mode == 'slurm-sing':
+    elif mode == "slurm" or mode == 'slurm-sing':
+        # Slurm specific configurations
+        from rmx.config import SlurmConfig
+        import randomname
+        import random
+        if 'slurm' not in machine.parsed_conf:
+            raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
+
+        proj_name_maxlen = 15
+        rand_num = random.randint(0, 100)
+        job_name = f'rmx-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
+        slurm_conf = SlurmConfig(job_name, **machine.parsed_conf['slurm'])
+
         # logger.info(f'slurm_conf: {machine.sconf}')
         ssh_client = SimpleSSHClient(machine.remote_conf)
         slurm_runner = SlurmRunner(ssh_client, rmxdirs)
@@ -232,14 +266,21 @@ def handler(project, machine: Machine, runtime_options):
         # Specify job name
         name = f'{machine.user}-rmx-{project.name}'
         if runtime_options.name is not None:
-            name = f'{name}--{runtime_options.name}'
-        machine.slurm_conf.job_name = name
+            name = f'{name}--{run_opt.name}'
+        slurm_conf.job_name = name
 
-        if machine.mode == 'slurm-sing':
-            # Decorate run_opt.cmd for singularity
+        if mode == 'slurm-sing':
+            # Decorate run_opt.cmd for Singularity
+
+            # sconf = SlurmConfig(job_name, **mconf['slurm'])
+            image = machine.parsed_conf.get('singularity', {}).get('sif_file')
+            overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
 
             # Overwrite rmx envvars.  Hmm I don't like this...
-            sing_rmxdirs = machine.sing.get_rmxdirs(project.name)
+            from rmx.cli._config_loader import DOCKER_ROOT_DIR, get_docker_rmxdirs
+            sing_rmxdirs = get_docker_rmxdirs(DOCKER_ROOT_DIR, project.name)
+
+            # TODO: Do we need this??
             env.update({
                 'RMX_CODE_DIR': sing_rmxdirs.codedir, 
                 'RMX_MOUNT_DIR': sing_rmxdirs.mountdir,
@@ -261,10 +302,10 @@ def handler(project, machine: Machine, runtime_options):
             options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
 
             # Overlay
-            if machine.sing.overlay:
-                options += [f'--overlay {machine.sing.overlay}']
+            if overlay:
+                options += [f'--overlay {overlay}']
 
-            # TEMP:
+            # TEMP: Only for tticslurm
             assert 'CUDA_VISIBLE_DEVICES' not in env, 'CUDA_VISIBLE_DEVICES will be automatically set. You should not specify it manually.'
             env['CUDA_VISIBLE_DEVICES'] = '$CUDA_VISIBLE_DEVICES'  # This let Singularity container use the envvar on the host
 
@@ -284,20 +325,24 @@ def handler(project, machine: Machine, runtime_options):
             assert run_opt.disown, "You must set -d option to use sweep functionality."
             sweep_ind = parse_sweep_idx(run_opt.sweep)
 
+            _slurm_conf = deepcopy(slurm_conf)
             for sweep_idx in sweep_ind:
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
-                slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf, 
+                _slurm_conf.job_name = f'{slurm_conf.job_name}-{sweep_idx}'
+                slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=_slurm_conf,
                                   startup=startup,
                                   interactive=False, num_sequence=run_opt.num_sequence,
                                   env=env, dry_run=run_opt.dry_run)
         else:
-            slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=machine.slurm_conf,
+            slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=slurm_conf,
                               startup=startup, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
                               env=env, dry_run=run_opt.dry_run)
+    else:
+        raise ValueError(f'Unrecognized mode: {mode}')
 
     # Sync output files
     if not runtime_options.no_sync:
-        _sync_output(project, machine, runtime_options)
+        _sync_output(project, machine, dry_run=parsed.dry_run)
 
 name = 'run'
 description = 'run command'

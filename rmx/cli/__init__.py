@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 from rmx import __version__
+from rmx import logger
 import sys
 import argparse
 
@@ -52,10 +53,14 @@ def core(args):
     parser = global_parser()
     parsed = parser.parse_args(args)
 
+    if parsed.verbose:
+        from logging import DEBUG
+        logger.setLevel(DEBUG)
+
     # Load config and fuse it with parsed arguments
     from ._config_loader import load_config
-    project, machine, runtime_options = load_config(parsed)
-    parsed.handler(project, machine, runtime_options)
+    project, remote_conf = load_config(parsed.machine)
+    parsed.handler(project, remote_conf, parsed)
 
 
 def main(args: list[str] | None = None) -> None:

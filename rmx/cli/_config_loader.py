@@ -48,25 +48,16 @@ class Machine:
     """Maintains machine configuration.
     - RemoteConfig (user, hostname, uri)
     """
-    def __init__(self, remote_conf: RemoteConfig, mode, rmxdir, 
+    def __init__(self, remote_conf: RemoteConfig, rmxdir,
                  startup: str = "",
-                 env: dict | None = None, 
-                 docker_conf: Docker | None = None,
-                 sing_conf: Singularity | None = None,
-                 slurm_conf: SlurmConfig | None = None) -> None:
-        self.mode = mode
+                 env: dict | None = None,
+                 parsed_conf: dict | None = None) -> None:
         self.remote_conf = remote_conf
         self.rmxdir = Path(rmxdir)
         self.env = env if env is not None else {}
-        self.docker = docker_conf
-        self.sing = sing_conf
         self.startup = startup
-        self.slurm_conf = slurm_conf
+        self.parsed_conf = parsed_conf
 
-        if mode == 'docker' and docker_conf is None:
-            raise KeyError('in docker mode, you must specify Docker config')
-
-            
         # aliases
         self.user = remote_conf.user
         self.host = remote_conf.host
@@ -84,13 +75,9 @@ class Machine:
             outdir=str(rootdir / 'output')
         )
 
-class Docker:  # Docker Conf
-    def __init__(self, image, rmxdir) -> None:
-        self.rmxdir = Path(rmxdir)
-        self.image = image
 
-    def get_rmxdirs(self, project_name: str) -> Namespace:
-        rootdir = self.rmxdir / project_name
+def get_docker_rmxdirs(rmxdir: Path | str, project_name: str) -> Namespace:
+        rootdir = Path(rmxdir) / project_name
         return Namespace(
             codedir=str(rootdir / 'code'),
             mountdir=str(rootdir / 'mount'),
@@ -98,57 +85,48 @@ class Docker:  # Docker Conf
         )
 
 
-class Singularity:  # Singularity Conf
-    def __init__(self, image, overlay, rmxdir) -> None:
-        self.rmxdir = Path(rmxdir)
-        self.image = image
-        self.overlay = overlay
+# class Docker:  # Docker Conf
+#     def __init__(self, image, rmxdir) -> None:
+#         self.rmxdir = Path(rmxdir)
+#         self.image = image
 
-    def get_rmxdirs(self, project_name: str) -> Namespace:
-        rootdir = self.rmxdir / project_name
-        return Namespace(
-            codedir=str(rootdir / 'code'),
-            mountdir=str(rootdir / 'mount'),
-            outdir=str(rootdir / 'output')
-        )
+#     def get_rmxdirs(self, project_name: str) -> Namespace:
+#         rootdir = self.rmxdir / project_name
+#         return Namespace(
+#             codedir=str(rootdir / 'code'),
+#             mountdir=str(rootdir / 'mount'),
+#             outdir=str(rootdir / 'output')
+#         )
 
 
-def load_config(parsed):
-    if parsed.verbose:
-        from logging import DEBUG
-        logger.setLevel(DEBUG)
+# class Singularity:  # Singularity Conf
+#     def __init__(self, image, overlay, rmxdir) -> None:
+#         self.rmxdir = Path(rmxdir)
+#         self.image = image
+#         self.overlay = overlay
 
+#     def get_rmxdirs(self, project_name: str) -> Namespace:
+#         rootdir = self.rmxdir / project_name
+#         return Namespace(
+#             codedir=str(rootdir / 'code'),
+#             mountdir=str(rootdir / 'mount'),
+#             outdir=str(rootdir / 'output')
+#         )
+
+
+def load_config(machine_name: str):
     proj_rootdir = find_project_root()
     config = parse_config(proj_rootdir)
 
-    pconfig = config.get('project', {})
-    mconf = config['machines'].get(parsed.machine)
+    pconf = config.get('project', {})
+    mconf = config['machines'].get(machine_name)
 
-    name = pconfig.get('name', proj_rootdir.stem)
+    name = pconf.get('name', proj_rootdir.stem)
     logger.info(f'Project name: {name}')
     logger.info(f'Project root directory: {proj_rootdir}')
 
-    # Runtime info
-    curr_dir = pathlib.Path(os.getcwd()).resolve()
-    rel_workdir = curr_dir.relative_to(proj_rootdir)
-    logger.info(f'relative working dir: {rel_workdir}')  # cwd.relative_to(project_root)
-    if isinstance(parsed.remote_command, list):
-        cmd = ' '.join(parsed.remote_command)
-    else:
-        cmd = parsed.remote_command
-
-    runtime_options = Namespace(dry_run=parsed.dry_run,
-                                cmd=cmd,
-                                rel_workdir=rel_workdir,
-                                disown=parsed.disown,
-                                name=parsed.name,
-                                sweep=parsed.sweep,
-                                num_sequence=parsed.num_sequence,
-                                no_sync=parsed.no_sync,
-                                force=parsed.force)
-
-    mount_dirs = pconfig.get('mount', [])
-    mount_from_host = pconfig.get('mount_from_host', {})
+    mount_dirs = pconf.get('mount', [])
+    mount_from_host = pconf.get('mount_from_host', {})
 
     if 'mount' in mconf:
         mount_dirs = mconf.get('mount', [])
@@ -158,69 +136,70 @@ def load_config(parsed):
     # Load extra env vars from .env.secret
     secret_env = dotenv_values((proj_rootdir / ".env.secret").resolve())
     if secret_env:
-        logger.info(f'Loaded following envs from .env.secret: {secret_env}')
+        logger.info(f'Loaded following envs from .env.secret: {dict(secret_env)}')
 
-    env = pconfig.get('environment', {})
+    project_env = pconf.get('environment', {})
     project = Project(name,
                       proj_rootdir,
-                      outdir=pconfig.get('outdir'),
-                      exclude=pconfig.get('exclude', []),
-                      startup=pconfig.get('startup', ""),
-                      env={**env, **secret_env},
+                      outdir=pconf.get('outdir'),
+                      exclude=pconf.get('exclude', []),
+                      startup=pconf.get('startup', ""),
+                      env={**project_env, **secret_env},
                       mount_dirs=mount_dirs,
                       mount_from_host=mount_from_host)
 
     
-    if parsed.machine not in config['machines']:
+    if machine_name not in config['machines']:
         raise KeyError(
-            f'Machine "{parsed.machine}" not found in the configuration. '
+            f'Machine "{machine_name}" not found in the configuration. '
             f'Available machines are: {" ".join(config["machines"].keys())}'
         )
     user, host = mconf['user'], mconf['host']
     remote_conf = RemoteConfig(user, host)
-    mode = parsed.mode or mconf.get('default_mode')
 
-    docker = None
-    sconf = None
-    sing = None
-    if mode is None:
-        logger.warn('mode is not set. Setting it to SSH mode')
-        mode = 'ssh'
-    elif mode == 'docker':
-        # Docker specific configurations
-        image = parsed.image or mconf.get('docker', {}).get('image')
-        if image is None:
-            raise KeyError('docker image is not specified.')
-        docker = Docker(image=image, rmxdir=DOCKER_ROOT_DIR)
 
-    elif mode == 'slurm' or mode == 'slurm-sing':
-        # Slurm specific configurations
-        from rmx.config import SlurmConfig
-        import randomname
-        import random
-        if 'slurm' not in mconf:
-            raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
+    # TODO: These machine-specific parts should go into each handler!
+    # sync command does not have a notion of "mode" !!
+    # mode = parsed.mode or mconf.get('default_mode')
 
-        proj_name_maxlen = 15
-        rand_num = random.randint(0, 100)
-        job_name = f'rmx-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
+    # docker = None
+    # sconf = None
+    # sing = None
+    # if mode is None:
+    #     logger.warn('mode is not set. Setting it to SSH mode')
+    #     mode = 'ssh'
+    # elif mode == 'docker':
+    #     # Docker specific configurations
+    #     image = parsed.image or mconf.get('docker', {}).get('image')
+    #     if image is None:
+    #         raise KeyError('docker image is not specified.')
+    #     docker = Docker(image=image, rmxdir=DOCKER_ROOT_DIR)
 
-        sconf = SlurmConfig(job_name, **mconf['slurm'])
+    # elif mode == 'slurm' or mode == 'slurm-sing':
+    #     # Slurm specific configurations
+    #     from rmx.config import SlurmConfig
+    #     import randomname
+    #     import random
+    #     if 'slurm' not in mconf:
+    #         raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
 
-        if mode == 'slurm-sing':
-            # sconf = SlurmConfig(job_name, **mconf['slurm'])
-            image = mconf.get('singularity', {}).get('sif_file')
-            overlay = mconf.get('singularity', {}).get('overlay')
+    #     proj_name_maxlen = 15
+    #     rand_num = random.randint(0, 100)
+    #     job_name = f'rmx-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
 
-            # TODO: Use Docker to store singularity info
-            sing = Singularity(image=image, overlay=overlay, rmxdir=DOCKER_ROOT_DIR)
+    #     sconf = SlurmConfig(job_name, **mconf['slurm'])
+
+    #     if mode == 'slurm-sing':
+    #         # sconf = SlurmConfig(job_name, **mconf['slurm'])
+    #         image = mconf.get('singularity', {}).get('sif_file')
+    #         overlay = mconf.get('singularity', {}).get('overlay')
+
+    #         # TODO: Use Docker to store singularity info
+    #         sing = Singularity(image=image, overlay=overlay, rmxdir=DOCKER_ROOT_DIR)
 
     machine = Machine(remote_conf,
-                      mode=mode,
                       rmxdir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}'),
-                      env=mconf.get('environment'),
-                      docker_conf=docker,
-                      sing_conf=sing,
-                      slurm_conf=sconf)
+                      env=mconf.get('environment', {}),
+                      parsed_conf=mconf)
 
-    return project, machine, runtime_options
+    return project, machine
