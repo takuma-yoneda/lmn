@@ -69,13 +69,13 @@ class DockerRunner:
                 container = None
             
             if container:
-                logger.info(f'Removing existing container: {docker_conf.name}')
+                logger.warn(f'Removing existing container: {docker_conf.name}')
                 container.remove(force=True)
 
         # NOTE: Intentionally being super verbose to make arguments explicit.
         d = docker_conf
         if interactive:
-            logger.warn('interactive is True. Force setting detach=False, tty=True, stdin_open=True.')
+            logger.info('interactive is True. Force setting detach=False, tty=True, stdin_open=True.')
             container = self.client.containers.create(d.image,
                                                 cmd,
                                                 name=d.name,
