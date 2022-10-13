@@ -1,23 +1,22 @@
+// You have to save this as either "~/.config/rmx" or "<project-directory>/.rmx.config".
 {
     "machines": {
-        "__help": "machine descriptions go here",
+        // machine descriptions go here
         "birch": {
-            "default_mode": "docker",
+            "mode": "docker",
             "host": "birch.ttic.edu",
             "user": "takuma",
             "docker": {
-                "__help": "default docker configuration",
-                "name": "ubuntu:18.04"
+                "image": "ubuntu:18.04"
             }
         },
         "tticslurm": {
-            "default_mode": "slurm",
+            "mode": "slurm",
             "host": "slurm.ttic.edu",
             "user": "takuma",
             "startup": ". ~/.bashrc",
             "root_dir": "/share/data/ripl/takuma/rmx",
             "slurm": {
-                "__help": "default slurm configuration",
                 "partition": "ripl-gpu",
                 "cpus_per_task": 1,
                 "time": "04:00:00",
@@ -29,13 +28,13 @@
         }
     },
     "docker-images": {
-        "__help": "docker image descriptions",
+        // shortcuts for docker images
         "mltools": {
             "name": "takumaynd/mltools"
         }
     },
     "slurm-configs": {
-        "__help": "custom slurm configurations",
+        // custom slurm configurations
         "multi-cpus": {
             "partition": "ripl-gpu",
             "cpus_per_task": 3,

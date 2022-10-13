@@ -1,10 +1,12 @@
 from __future__ import annotations
 from argparse import Namespace
-from os import kill
+from typing import Iterable
+import threading
 from rmx import logger
+from docker import DockerClient
 from rmx.config import DockerContainerConfig
 from rmx.machine import SimpleSSHClient
-from docker import DockerClient
+from rmx.helpers import replace_rmx_envvars
 
 def get_rmxenvs(cmd: str, rmxdirs: Namespace):
     return {'RMX_CODE_DIR': rmxdirs.codedir, 
@@ -30,9 +32,10 @@ class SSHRunner:
         logger.info(f'ssh run with command: {cmd}')
         logger.info(f'cd to {self.rmxdirs.codedir / relative_workdir}')
         rmxenv = get_rmxenvs(cmd, self.rmxdirs)
-        env.update(rmxenv)
+        allenv = {**env, **rmxenv}
+        allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
         return self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),
-                               disown=disown, env=env, dry_run=dry_run, pty=True)
+                               disown=disown, env=allenv, dry_run=dry_run, pty=True)
 
 
 class DockerRunner:
@@ -42,11 +45,10 @@ class DockerRunner:
 
     def exec(self, cmd: str, relative_workdir, docker_conf: DockerContainerConfig,
              kill_existing_container: bool = True, interactive: bool = True, quiet: bool = False) -> None:
-        from rmx.helpers import replace_rmx_envvars
 
         rmxenv = get_rmxenvs(cmd, self.rmxdirs)
-        allenv = {**rmxenv, **docker_conf.env}
-        allenv = replace_rmx_envvars(allenv)
+        allenv = {**docker_conf.env, **rmxenv}
+        allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
 
         # NOTE: target: container, source: remote host
         logger.info(f'mounts: {docker_conf.mounts}')
@@ -69,7 +71,7 @@ class DockerRunner:
                 container = None
             
             if container:
-                logger.warn(f'Removing existing container: {docker_conf.name}')
+                logger.warn(f'Removing the existing container: {docker_conf.name}')
                 container.remove(force=True)
 
         # NOTE: Intentionally being super verbose to make arguments explicit.
@@ -101,8 +103,8 @@ class DockerRunner:
                                                 network=d.network,
                                                 ipc_mode=d.ipc_mode,
                                                 detach=True,
-                                                tty=d.tty,
-                                                stdin_open=True,
+                                                tty=False,  # If True, stdout/stderr are mixed
+                                                stdin_open=True,  # It's useful to keep it open, as you may manually attach the container later
                                                 mounts=d.mounts,
                                                 environment=allenv,
                                                 device_requests=d.device_requests,
@@ -110,14 +112,31 @@ class DockerRunner:
                                                 # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
                                                 )
             logger.info(f'container: {container}')
-            if not quiet:
-                # Block and listen to the stream from container
-                stream = container.logs(stream=True, follow=True)
-                logger.info('--- listening container stdout/stderr ---\n')
+
+            def log_stream(stream: Iterable):
+                """print out log stream"""
                 for char in stream:
                     # logger.info(char.decode('utf-8'))
                     # 'ignore' ignores decode error that happens when multi-byte char is passed.
                     print(char.decode('utf-8', 'ignore'), end='')
+
+
+            if quiet:
+                pass
+
+                # Attach log stream in a separate thread, and only output stderr
+                # stream = container.logs(stdout=False, stderr=True, stream=True, follow=True)
+                # logger.info('quiet is True, only listening to stderr.')
+                # logger.info('--- listening container stderr ---\n')
+                # thr = threading.Thread(target=log_stream, args=(stream, ))
+                # thr.start()
+                # thr.join()  # This blocks forever ;P
+
+            else:
+                # Block and listen to the stream from container
+                stream = container.logs(stream=True, follow=True)
+                logger.info('--- listening container stdout/stderr ---\n')
+                log_stream(stream)
 
 
 class SlurmRunner:
@@ -160,11 +179,9 @@ class SlurmRunner:
             # User may expect stdout shown on the console.
             logger.info('--output/--error argument for Slurm is ignored in interactive mode.')
 
-        # Hmmmm, Fabric seems to have an issue to handle envvar that contains spaces...
-        # This is the issue of using "inline_ssh_env" that essentially sets envvars by putting bunch of export KEY=VAL before running shells.
-        # The documentation clearly says developers need to handle shell escaping for non-trivial values.
         rmxenv = get_rmxenvs(cmd, self.rmxdirs)
-        env.update(rmxenv)
+        allenv = {**env, **rmxenv}
+        allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
 
         if startup:
             cmd = f'{startup} && {cmd}'
@@ -182,7 +199,7 @@ class SlurmRunner:
             logger.info(f'srun mode:\n{cmd}')
             logger.info(f'cd to {workdir}')
             return self.client.run(cmd, directory=workdir,
-                                   disown=False, env=env, pty=True, dry_run=dry_run)
+                                   disown=False, env=allenv, pty=True, dry_run=dry_run)
         else:
             cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {s.shell}')
             logger.info(f'sbatch mode:\n{cmd}')
@@ -190,7 +207,7 @@ class SlurmRunner:
 
             cmd = '\n'.join([cmd] * num_sequence)
             result = self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),
-                                     disown=False, env=env, dry_run=dry_run)
+                                     disown=False, env=allenv, dry_run=dry_run)
             if result.stderr:
                 logger.warn('sbatch job submission failed:', result.stderr)
             jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833

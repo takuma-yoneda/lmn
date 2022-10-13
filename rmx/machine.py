@@ -53,9 +53,11 @@ class SimpleSSHClient:
         
         # TODO: Check if $HOME would work or not!!
         env = {} if env is None else env
-        env = replace_rmx_envvars(env)
 
         # Perform shell escaping for envvars
+        # NOTE: Fabric seems to have an issue to handle envvar that contains spaces...
+        # This is the issue of using "inline_ssh_env" that essentially sets envvars by putting bunch of export KEY=VAL before running shells.
+        # The documentation clearly says developers need to handle shell escaping for non-trivial values.
         # TEMP: shell escaping only when env contains space
         import shlex
         env = {key: shlex.quote(str(val)) if " " in str(val) else str(val) for key, val in env.items()}

@@ -168,21 +168,39 @@ def posixpath2str(obj):
     else:
         return obj
 
+
 def defreeze_dict(frozen_dict: frozenset):
     return {key: val for key, val in frozen_dict}
 
 
-
-def replace_rmx_envvars(env: dict):
+def replace_rmx_envvars(query: str, rmxenvs: dict):
+    """
+    Replace RMX_* envvars (i.e., ${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR}) with actual path
+    Args
+      query (string): input string to process
+      rmxenvs (dict): map from RMX_* envvars to actual paths
+    """
     import re
-    # Replace RMX_* envvars: (${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR})
-    # This cannot happen automatically on remote server side, since we set these envvars exactly at the same time as other envvars.
     rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
-    for target_key in rmx_envvars:
-        # Match "${target_key}" or "$target_key"
-        regex = r'{}'.format('(\$\{' + target_key + '\}' + f'|\$' + target_key + ')')
-        env = {key: re.sub(regex, str(env[target_key]), str(val)) for key, val in env.items()}
-    return env
+    for original in rmx_envvars:
+        # Match "${original}" or "$original"
+        regex = r'{}'.format('(\$\{' + original + '\}' + f'|\$' + original + ')')
+        target = rmxenvs[original]
+        query = re.sub(regex, str(target), str(query))
+    return query
+
+
+# def replace_rmx_envvars(env: dict):
+#     import re
+#     # Replace RMX_* envvars: (${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR})
+#     # This cannot happen automatically on remote server side, since we set these envvars exactly at the same time as other envvars.
+#     rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
+#     for original in rmx_envvars:
+#         # Match "${original}" or "$original"
+#         regex = r'{}'.format('(\$\{' + original + '\}' + f'|\$' + original + ')')
+#         target = str(env[original])
+#         env = {key: re.sub(regex, target, str(val)) for key, val in env.items()}
+#     return env
 
 
 from os.path import expandvars

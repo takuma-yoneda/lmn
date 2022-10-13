@@ -78,13 +78,11 @@ def _get_parser() -> ArgumentParser:
         default=1,
         help="number of sequence in Slurm sequential jobs"
     )
-    # TEMP: Sweep functionality
     parser.add_argument(
         "--sweep",
         action="store",
         type=str,
-        help="specify sweep range (e.g., --sweep 1-255) this is reflected to envvar $RMX_RUN_SWEEP_IDX"
-                "Temporarily only available for slurm mode."
+        help="specify sweep range (e.g., --sweep 0-255) this changes the value of $RMX_RUN_SWEEP_IDX"
     )
     parser.add_argument(
         "--num_sequence",
@@ -159,14 +157,13 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
     env = {**project.env, **machine.env}
     rmxdirs = machine.get_rmxdirs(project.name)
 
-    # TODO: This should come later
-    startup = '&&'.join([e for e in [machine.startup, project.startup] if e.strip() != ""])
+    startup = '&&'.join([e for e in [project.startup, machine.startup] if e.strip()])
 
-    if parsed.mode is None:
+    # If parsed.mode is not set, try to read from the config file.
+    mode = parsed.mode or machine.parsed_conf.get('mode')
+    if mode is None:
         logger.warn('mode is not set. Setting it to SSH mode')
         mode = 'ssh'
-    else:
-        mode = parsed.mode
 
     if mode == 'ssh':
         from rmx.runner import SSHRunner

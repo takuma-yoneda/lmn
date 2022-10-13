@@ -51,9 +51,12 @@ def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
         result = ssh_client.run(f'ls -l {rmxdirs.outdir} | grep -v "^total" | wc -l', hide=True)
         num_output_files = int(result.stdout)
         logger.info(f'{num_output_files} files are in the output directory')
-        if num_output_files:
+        if num_output_files > 0:
             rsync(source_dir=machine.uri(rmxdirs.outdir), target_dir=project.outdir,
                   dry_run=dry_run)
+    else:
+        logger.warn('project.outdir is set to None. Doing nothing here.')
+
 
 
 def handler(project: Project, machine: Machine, parsed: Namespace):

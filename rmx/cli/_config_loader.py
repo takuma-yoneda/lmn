@@ -13,7 +13,6 @@ from rmx.machine import RemoteConfig
 
 DOCKER_ROOT_DIR = '/rmx'
 REMOTE_ROOT_DIR = '/tmp'
-LOCAL_OUTPUT_DIR = expandvars('${HOME}/.rmx/output')
 
 class Project:
     """Maintains the info specific to the local project"""
@@ -22,7 +21,7 @@ class Project:
                  env: dict | None = None) -> None:
         self.name = name
         self.rootdir = Path(rootdir)
-        self.outdir = Path(LOCAL_OUTPUT_DIR) / name if outdir is None else outdir
+        self.outdir = self.rootdir / ".output" if outdir is None else outdir
         self.exclude = exclude
         self.startup = startup
         self.env = env if env is not None else {}
@@ -32,10 +31,8 @@ class Project:
         self._make_directories()
 
     def _make_directories(self):
-        # TODO: use pathlib API
-        import os
-        os.makedirs(self.rootdir, exist_ok=True)
-        os.makedirs(self.outdir, exist_ok=True)
+        self.rootdir.mkdir(parents=True, exist_ok=True)
+        self.outdir.mkdir(parents=True, exist_ok=True)
 
     def get_dict(self):
         return {key: val for key, val in vars(self).items() if not (key.startswith('__') or callable(val))}
@@ -85,35 +82,6 @@ def get_docker_rmxdirs(rmxdir: Path | str, project_name: str) -> Namespace:
         )
 
 
-# class Docker:  # Docker Conf
-#     def __init__(self, image, rmxdir) -> None:
-#         self.rmxdir = Path(rmxdir)
-#         self.image = image
-
-#     def get_rmxdirs(self, project_name: str) -> Namespace:
-#         rootdir = self.rmxdir / project_name
-#         return Namespace(
-#             codedir=str(rootdir / 'code'),
-#             mountdir=str(rootdir / 'mount'),
-#             outdir=str(rootdir / 'output')
-#         )
-
-
-# class Singularity:  # Singularity Conf
-#     def __init__(self, image, overlay, rmxdir) -> None:
-#         self.rmxdir = Path(rmxdir)
-#         self.image = image
-#         self.overlay = overlay
-
-#     def get_rmxdirs(self, project_name: str) -> Namespace:
-#         rootdir = self.rmxdir / project_name
-#         return Namespace(
-#             codedir=str(rootdir / 'code'),
-#             mountdir=str(rootdir / 'mount'),
-#             outdir=str(rootdir / 'output')
-#         )
-
-
 def load_config(machine_name: str):
     proj_rootdir = find_project_root()
     config = parse_config(proj_rootdir)
@@ -156,46 +124,6 @@ def load_config(machine_name: str):
         )
     user, host = mconf['user'], mconf['host']
     remote_conf = RemoteConfig(user, host)
-
-
-    # TODO: These machine-specific parts should go into each handler!
-    # sync command does not have a notion of "mode" !!
-    # mode = parsed.mode or mconf.get('default_mode')
-
-    # docker = None
-    # sconf = None
-    # sing = None
-    # if mode is None:
-    #     logger.warn('mode is not set. Setting it to SSH mode')
-    #     mode = 'ssh'
-    # elif mode == 'docker':
-    #     # Docker specific configurations
-    #     image = parsed.image or mconf.get('docker', {}).get('image')
-    #     if image is None:
-    #         raise KeyError('docker image is not specified.')
-    #     docker = Docker(image=image, rmxdir=DOCKER_ROOT_DIR)
-
-    # elif mode == 'slurm' or mode == 'slurm-sing':
-    #     # Slurm specific configurations
-    #     from rmx.config import SlurmConfig
-    #     import randomname
-    #     import random
-    #     if 'slurm' not in mconf:
-    #         raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
-
-    #     proj_name_maxlen = 15
-    #     rand_num = random.randint(0, 100)
-    #     job_name = f'rmx-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
-
-    #     sconf = SlurmConfig(job_name, **mconf['slurm'])
-
-    #     if mode == 'slurm-sing':
-    #         # sconf = SlurmConfig(job_name, **mconf['slurm'])
-    #         image = mconf.get('singularity', {}).get('sif_file')
-    #         overlay = mconf.get('singularity', {}).get('overlay')
-
-    #         # TODO: Use Docker to store singularity info
-    #         sing = Singularity(image=image, overlay=overlay, rmxdir=DOCKER_ROOT_DIR)
 
     machine = Machine(remote_conf,
                       rmxdir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}'),
