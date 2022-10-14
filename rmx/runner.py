@@ -44,7 +44,10 @@ class DockerRunner:
         self.rmxdirs = rmxdirs
 
     def exec(self, cmd: str, relative_workdir, docker_conf: DockerContainerConfig,
-             kill_existing_container: bool = True, interactive: bool = True, quiet: bool = False) -> None:
+             kill_existing_container: bool = True, interactive: bool = True, quiet: bool = False,
+             log_stderr_background: bool = False) -> None:
+        if log_stderr_background:
+            assert not interactive, 'log_stderr_background=True cannot be used with interactive=True'
 
         rmxenv = get_rmxenvs(cmd, self.rmxdirs)
         allenv = {**docker_conf.env, **rmxenv}
@@ -121,22 +124,21 @@ class DockerRunner:
                     print(char.decode('utf-8', 'ignore'), end='')
 
 
-            if quiet:
-                pass
+            if not quiet:
+                if log_stderr_background:
+                    # Attach log stream in a separate thread, and only output stderr
+                    stream = container.logs(stdout=False, stderr=True, stream=True, follow=True)
+                    logger.info('quiet is True, only listening to stderr.')
+                    logger.info('--- listening container stderr ---\n')
+                    thr = threading.Thread(target=log_stream, args=(stream, ))
+                    thr.start()
+                    # thr.join()  # This blocks forever ;P
 
-                # Attach log stream in a separate thread, and only output stderr
-                # stream = container.logs(stdout=False, stderr=True, stream=True, follow=True)
-                # logger.info('quiet is True, only listening to stderr.')
-                # logger.info('--- listening container stderr ---\n')
-                # thr = threading.Thread(target=log_stream, args=(stream, ))
-                # thr.start()
-                # thr.join()  # This blocks forever ;P
-
-            else:
-                # Block and listen to the stream from container
-                stream = container.logs(stream=True, follow=True)
-                logger.info('--- listening container stdout/stderr ---\n')
-                log_stream(stream)
+                else:
+                    # Block and listen to the stream from container
+                    stream = container.logs(stream=True, follow=True)
+                    logger.info('--- listening container stdout/stderr ---\n')
+                    log_stream(stream)
 
 
 class SlurmRunner:
