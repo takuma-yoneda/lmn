@@ -1,6 +1,6 @@
 from copy import deepcopy
 import os
-import pathlib
+from pathlib import Path
 from argparse import ArgumentParser
 from argparse import Namespace
 from rmx import logger
@@ -75,7 +75,6 @@ def _get_parser() -> ArgumentParser:
         "--num-sequence",
         action="store",
         type=int,
-        default=1,
         help="number of sequence in Slurm sequential jobs"
     )
     parser.add_argument(
@@ -83,12 +82,6 @@ def _get_parser() -> ArgumentParser:
         action="store",
         type=str,
         help="specify sweep range (e.g., --sweep 0-255) this changes the value of $RMX_RUN_SWEEP_IDX"
-    )
-    parser.add_argument(
-        "--num_sequence",
-        action="store",
-        type=int,
-        help="(For slurm) number of repetitions for a sequential job."
     )
     parser.add_argument(
         "remote_command",
@@ -128,7 +121,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
     logger.info(f'parsed: {parsed}')
 
     # Runtime info
-    curr_dir = pathlib.Path(os.getcwd()).resolve()
+    curr_dir = Path(os.getcwd()).resolve()
     proj_rootdir = find_project_root()
     rel_workdir = curr_dir.relative_to(proj_rootdir)
     logger.info(f'relative working dir: {rel_workdir}')  # cwd.relative_to(project_root)

@@ -12,7 +12,7 @@ from dotenv import dotenv_values
 from rmx.machine import RemoteConfig
 
 DOCKER_ROOT_DIR = '/rmx'
-REMOTE_ROOT_DIR = '/tmp'
+REMOTE_ROOT_DIR = '/tmp/rmx'
 
 class Project:
     """Maintains the info specific to the local project"""
@@ -45,7 +45,7 @@ class Machine:
     """Maintains machine configuration.
     - RemoteConfig (user, hostname, uri)
     """
-    def __init__(self, remote_conf: RemoteConfig, rmxdir,
+    def __init__(self, remote_conf: RemoteConfig, rmxdir: str | Path,
                  startup: str = "",
                  env: dict | None = None,
                  parsed_conf: dict | None = None) -> None:
