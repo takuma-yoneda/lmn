@@ -71,6 +71,11 @@ def _get_parser() -> ArgumentParser:
         help="Do not perform rsync. This means your local files will not be synced with remote server.",
     )
     parser.add_argument(
+        "--contain",
+        action="store_true",
+        help="With this flag, rsync will copy the project directory to a new unique location on remote, rather than the predetermined one.",
+    )
+    parser.add_argument(
         "-n",
         "--num-sequence",
         action="store",
@@ -145,6 +150,15 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
         logger.warn('--no-sync option is True, local files will not be synced.')
 
     if not parsed.no_sync:
+        if parsed.contain:
+            # Generate a unique path and set it to machine.rmxdir
+            import hashlib
+            import time
+            hashlib.sha1().update(str(time.time()).encode("utf-8"))
+            _hash = hashlib.sha1().hexdigest()
+            machine.rmxdir = Path(f'{machine.rmxdir}/{_hash}')
+            logger.warn(f'--contain is True, setting the remote rmxdir to {machine.rmxdir}')
+
         _sync_code(project, machine, runtime_options.dry_run)
 
     env = {**project.env, **machine.env}
