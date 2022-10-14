@@ -207,6 +207,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             assert runtime_options.disown, "You must set -d option to use sweep functionality."
             sweep_ind = parse_sweep_idx(runtime_options.sweep)
 
+            single_sweep = (len(sweep_ind) == 1)
+
             for sweep_idx in sweep_ind:
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
                 docker_conf = DockerContainerConfig(
@@ -220,7 +222,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
                                    docker_conf,
                                    interactive=False,
                                    kill_existing_container=runtime_options.force,
-                                   quiet=True)
+                                   quiet=not single_sweep)
+            # import time
+            # logger.warn('Sleeping for 5 seconds to see if the container fails...')
+            # logger.warn('You can safely exit anytime')
+            # time.sleep(10)
         else:
             docker_conf = DockerContainerConfig(
                 image=image,
