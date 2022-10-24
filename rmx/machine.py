@@ -2,6 +2,7 @@
 import os
 from os.path import expandvars
 from rmx.helpers import posixpath2str, replace_rmx_envvars
+import invoke
 
 from rmx import logger
 
@@ -79,7 +80,13 @@ class SimpleSSHClient:
                 # NOTE: if you use asynchronous=True, stdout/stderr does not show up
                 # when you use it on slurm. I have no idea why, tho.
                 logger.info(f'ssh client env: {env}')
-                result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
+                try:
+                    result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
+                except invoke.exceptions.UnexpectedExit as e:
+                    logger.info(f'Caught an exception!!:\n{str(e)}')
+                    import sys
+                    sys.exit(1)
+
             return result
 
     def put(self, file_like, target_path=None):

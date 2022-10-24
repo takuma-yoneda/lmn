@@ -129,12 +129,13 @@ def find_project_root():
 
 
 
+TIMESTAMP_FORMAT = '%Y-%m-%d_%H%M%S-%f'
 from datetime import datetime
 def get_timestamp() -> str:
-    return datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S.%f')
+    return datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
 
 def read_timestamp(time_str: str) -> datetime:
-    return datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S.%f')
+    return datetime.strptime(time_str, TIMESTAMP_FORMAT)
 
 
 def wrap_shebang(command, shell='bash'):

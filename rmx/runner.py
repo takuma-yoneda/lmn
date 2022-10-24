@@ -77,22 +77,26 @@ class DockerRunner:
                 logger.warn(f'Removing the existing container: {docker_conf.name}')
                 container.remove(force=True)
 
+        # NOTE: Consider using Volume rather than Mount
+        # - https://docker-py.readthedocs.io/en/1.2.3/volumes/
+        # - https://docs.docker.com/storage/bind-mounts/
+
         # NOTE: Intentionally being super verbose to make arguments explicit.
         d = docker_conf
         if interactive:
             logger.info('interactive is True. Force setting detach=False, tty=True, stdin_open=True.')
             container = self.client.containers.create(d.image,
-                                                cmd,
-                                                name=d.name,
-                                                network=d.network,
-                                                ipc_mode=d.ipc_mode,
-                                                detach=False,
-                                                tty=True,
-                                                stdin_open=True,
-                                                mounts=d.mounts,
-                                                environment=allenv,
-                                                device_requests=d.device_requests,
-                                                working_dir=str(self.rmxdirs.codedir / relative_workdir),
+                                                      cmd,
+                                                      name=d.name,
+                                                      network=d.network,
+                                                      ipc_mode=d.ipc_mode,
+                                                      detach=False,
+                                                      tty=True,
+                                                      stdin_open=True,
+                                                      mounts=d.mounts,
+                                                      environment=allenv,
+                                                      device_requests=d.device_requests,
+                                                      working_dir=str(self.rmxdirs.codedir / relative_workdir),
                                                 # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
                                                 )
             logger.info(f'container: {container}')
@@ -100,19 +104,18 @@ class DockerRunner:
             dockerpty.start(self.client.api, container.id)
         else:
             container = self.client.containers.run(d.image,
-                                                cmd,
-                                                name=d.name,
-                                                remove=d.remove,  # Keep it running as we need to change
-                                                network=d.network,
-                                                ipc_mode=d.ipc_mode,
-                                                detach=True,
-                                                tty=False,  # If True, stdout/stderr are mixed
-                                                stdin_open=True,  # It's useful to keep it open, as you may manually attach the container later
-                                                mounts=d.mounts,
-                                                environment=allenv,
-                                                device_requests=d.device_requests,
-                                                working_dir=str(self.rmxdirs.codedir / relative_workdir),
-                                                # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
+                                                   cmd,
+                                                   name=d.name,
+                                                   remove=d.remove,  # Keep it running as we need to change
+                                                   network=d.network,
+                                                   ipc_mode=d.ipc_mode,
+                                                   detach=True,
+                                                   tty=(not log_stderr_background),  # If True, stdout/stderr are mixed, but I observed sometimes some stdout are not showing up when tty=False
+                                                   stdin_open=True,  # It's useful to keep it open, as you may manually attach the container later
+                                                   mounts=d.mounts,
+                                                   environment=allenv,
+                                                   device_requests=d.device_requests,
+                                                   working_dir=str(self.rmxdirs.codedir / relative_workdir),
                                                 )
             logger.info(f'container: {container}')
 
@@ -192,9 +195,11 @@ class SlurmRunner:
             # cmd = f'{shell} -i -c \'{cmd}\''
             # Create a temp bash file and put it on the remote server.
             workdir = self.rmxdirs.codedir / relative_workdir
-            logger.info('exec file: ' + f"#!/usr/bin/env {s.shell}\n{cmd}\n{s.shell}")
+            exec_file = f"#!/usr/bin/env {s.shell}\n{cmd}"
+            logger.info(f'exec file: {exec_file}')
             from io import StringIO
-            file_obj = StringIO(f"#!/usr/bin/env {s.shell}\n{cmd}\n{s.shell}")
+            # file_obj = StringIO(f"#!/usr/bin/env {s.shell}\n{cmd}\n{s.shell}")
+            file_obj = StringIO(exec_file)
             self.client.put(file_obj, workdir / '.srun-script.sh')
             cmd = slurm_command.srun('.srun-script.sh', pty=s.shell)
 

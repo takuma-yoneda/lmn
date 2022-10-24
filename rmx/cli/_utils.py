@@ -30,18 +30,20 @@ def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, trans
 
     cmd = f"rsync --info=progress2 --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
     logger.info(f'running command: {cmd}')
-    run_cmd(cmd, shell=True, dry_run=dry_run)
-    logger.info("Sync finished!")
+
+    if not dry_run:
+        out = run_cmd(cmd, shell=True)
+        logger.info("Sync finished!")
+
+        if out.returncode != 0:
+            raise OSError(f'The following rsync command failed:\n{out.args}\n\n{out.stderr.decode("utf-8")}')
+        return out
 
 
-def run_cmd(cmd, get_output=False, shell=False, dry_run=False):
+def run_cmd(cmd, get_output=False, shell=False) -> subprocess.CompletedProcess:
 
     if shell and isinstance(cmd, (list, tuple)):
         cmd = " ".join([str(s) for s in cmd])
-
-    if dry_run:
-        logger.info('dry_run:', cmd)
-        return
 
     if get_output:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=shell)
@@ -53,5 +55,5 @@ def run_cmd(cmd, get_output=False, shell=False, dry_run=False):
         logger.info(out)
         return out
     else:
-        res = subprocess.run(cmd, shell=shell)
-        return res.returncode
+        res = subprocess.run(cmd, shell=shell, capture_output=True)
+        return res

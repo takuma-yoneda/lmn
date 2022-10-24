@@ -80,6 +80,7 @@ def _get_parser() -> ArgumentParser:
         "--num-sequence",
         action="store",
         type=int,
+        default=1,
         help="number of sequence in Slurm sequential jobs"
     )
     parser.add_argument(
@@ -122,8 +123,8 @@ def parse_sweep_idx(sweep_str):
 
 
 def handler(project: Project, machine: Machine, parsed: Namespace):
-    logger.info(f'handling command for {__file__}')
-    logger.info(f'parsed: {parsed}')
+    logger.debug(f'handling command for {__file__}')
+    logger.debug(f'parsed: {parsed}')
 
     # Runtime info
     curr_dir = Path(os.getcwd()).resolve()
@@ -152,12 +153,16 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
     if not parsed.no_sync:
         if parsed.contain:
             # Generate a unique path and set it to machine.rmxdir
-            import hashlib
-            import time
-            hashlib.sha1().update(str(time.time()).encode("utf-8"))
-            _hash = hashlib.sha1().hexdigest()
+            # BUG: This generates the same hash every time!! This stack overflow answer is obviously wrong: https://stackoverflow.com/a/6048639/19913466
+            # import hashlib
+            # import time
+            # hashlib.sha1().update(str(time.time()).encode("utf-8"))
+            # _hash = hashlib.sha1().hexdigest()
+            from rmx.helpers import get_timestamp
+            _hash = get_timestamp()
             machine.rmxdir = Path(f'{machine.rmxdir}/{_hash}')
-            logger.warn(f'--contain is True, setting the remote rmxdir to {machine.rmxdir}')
+            runtime_options.name = _hash
+            logger.warn(f'--contain is True:\n\tsetting the remote rmxdir to {machine.rmxdir}\n\tsetting jobs suffix to {_hash}')
 
         _sync_code(project, machine, runtime_options.dry_run)
 
@@ -283,6 +288,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             # Decorate run_opt.cmd for Singularity
 
             # sconf = SlurmConfig(job_name, **mconf['slurm'])
+            if machine.parsed_conf is None or 'singularity' not in machine.parsed_conf:
+                raise ValueError('Entry "singularity" not found in the config file.')
+
             image = machine.parsed_conf.get('singularity', {}).get('sif_file')
             overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
 
@@ -300,7 +308,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             # NOTE: Without --containall, nvidia-smi command fails with "couldn't find libnvidia-ml.so library in your system."
             # NOTE: Without bash -c '{cmd}', if you put PYTHONPATH=/foo/bar, it fails with no such file or directory 'PYTHONPATH=/foo/bar'
             # TODO: Will the envvars be taken over to the internal shell (by this extra bash command)?
-            sing_cmd = "singularity run --nv --containall {options} {sif_file} bash -c '{cmd}'"
+            # sing_cmd = "singularity run --nv --containall {options} {sif_file} bash -c '{cmd}'"
+            sing_cmd = "singularity run --nv --containall {options} {sif_file} {cmd}"
             options = []
 
             # Bind
@@ -329,7 +338,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
 
             # Overwrite command
             options = ' '.join(options)
-            run_opt.cmd = sing_cmd.format(options=options, sif_file=machine.sing.image, cmd=run_opt.cmd)
+            run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=run_opt.cmd)
 
         if run_opt.sweep:
             assert run_opt.disown, "You must set -d option to use sweep functionality."
