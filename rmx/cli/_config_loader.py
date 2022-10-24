@@ -12,7 +12,11 @@ from dotenv import dotenv_values
 from rmx.machine import RemoteConfig
 
 DOCKER_ROOT_DIR = '/rmx'
-REMOTE_ROOT_DIR = '/tmp/rmx'
+
+# NOTE: I used to set it to /tmp/rmx, but that causes an issue:
+# When multiple users use this directory, the one who used this first set the permission of /tmp/rmx
+# to be his/hers, thus others trying to use it later cannot access it.
+REMOTE_ROOT_DIR = '/tmp'
 
 class Project:
     """Maintains the info specific to the local project"""
@@ -126,7 +130,7 @@ def load_config(machine_name: str):
     remote_conf = RemoteConfig(user, host)
 
     machine = Machine(remote_conf,
-                      rmxdir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}'),
+                      rmxdir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}/rmx'),
                       env=mconf.get('environment', {}),
                       parsed_conf=mconf)
 
