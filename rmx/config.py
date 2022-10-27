@@ -7,7 +7,10 @@ from rmx import logger
 
 class DockerContainerConfig:
     def __init__(self, image, name, env: dict | None = None, remove=True, network='host', ipc_mode='host', mounts=None,
-                 startup: str | None = None, tty=True, use_gpus=True, runtime='docker') -> None:
+                 startup: str | None = None, tty=True, use_gpus=True, user_id: int = 0, group_id: int = 0, runtime='docker') -> None:
+        """
+        user_id (int | str): The format is either 2003 for user_id or 2003:4000 to specify user id and group id.
+        """
         self.image = image
         self.name = name
         self.env = {} if env is None else env
@@ -20,6 +23,8 @@ class DockerContainerConfig:
         self.device_requests = []
         self.runtime = runtime
         self.use_gpus = use_gpus
+        self.user_id = user_id
+        self.group_id = group_id
 
         if use_gpus:
             self.add_gpus()

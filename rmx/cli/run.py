@@ -227,6 +227,17 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
 
         # Docker specific configurations
         image = parsed.image or machine.parsed_conf.get('docker', {}).get('image')
+        user_id = machine.parsed_conf.get('docker', {}).get('user_id', 0)
+        group_id = machine.parsed_conf.get('docker', {}).get('group_id', 0)
+
+
+        if not isinstance(user_id, int):
+            raise ValueError('user_id must be an integer')
+
+        if not isinstance(group_id, int):
+            raise ValueError('group_id must be an integer')
+
+
         if image is None:
             raise KeyError('docker image is not specified.')
 
@@ -245,7 +256,10 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
                     image=image,
                     name=name,
                     mounts=mounts,
+                    startup=startup,
                     env=env,
+                    user_id=user_id,
+                    group_id=group_id
                 )
                 docker_runner.exec(runtime_options.cmd,
                                    runtime_options.rel_workdir,
@@ -262,7 +276,10 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
                 image=image,
                 name=name,
                 mounts=mounts,
-                env=env
+                startup=startup,
+                env=env,
+                user_id=user_id,
+                group_id=group_id,
             )
             docker_runner.exec(runtime_options.cmd,
                                runtime_options.rel_workdir,
