@@ -75,7 +75,7 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.rmx.config', '${HOME
         with open(path, 'r') as f:
             global_conf = json.load(f)
     else:
-        logger.warn('rmx global config file cannot be located.')
+        logger.warning('rmx global config file cannot be located.')
         global_conf = {}
 
     local_conf = _maybe_load(f'{project_root}/.rmx.config')
@@ -120,7 +120,7 @@ def find_project_root():
         if is_proj_root(directory):
             return directory
 
-    logger.warn('.git directory or .rmx file not found in the ancestor directories.\n'
+    logger.warning('.git directory or .rmx file not found in the ancestor directories.\n'
                 'Setting project root to current directory')
 
     assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from copy import deepcopy
 import os
 from pathlib import Path
@@ -122,6 +123,12 @@ def parse_sweep_idx(sweep_str):
     return sweep_ind
 
 
+def print_conf(mode: str, machine: Machine, image: str | None = None):
+    output = f'Running with [{mode}] mode on [{machine.remote_conf.base_uri}]'
+    if image is not None:
+        output += f' with image: [{image}]'
+    logger.info(output)
+
 def handler(project: Project, machine: Machine, parsed: Namespace):
     logger.debug(f'handling command for {__file__}')
     logger.debug(f'parsed: {parsed}')
@@ -130,7 +137,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
     curr_dir = Path(os.getcwd()).resolve()
     proj_rootdir = find_project_root()
     rel_workdir = curr_dir.relative_to(proj_rootdir)
-    logger.info(f'relative working dir: {rel_workdir}')  # cwd.relative_to(project_root)
+    logger.debug(f'relative working dir: {rel_workdir}')  # cwd.relative_to(project_root)
     if isinstance(parsed.remote_command, list):
         cmd = ' '.join(parsed.remote_command)
     else:
@@ -148,7 +155,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
 
     # Sync code first
     if parsed.no_sync:
-        logger.warn('--no-sync option is True, local files will not be synced.')
+        logger.warning('--no-sync option is True, local files will not be synced.')
 
     if not parsed.no_sync:
         if parsed.contain:
@@ -162,26 +169,27 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             _hash = get_timestamp()
             machine.rmxdir = Path(f'{machine.rmxdir}/{_hash}')
             runtime_options.name = _hash
-            logger.warn(f'--contain is True:\n\tsetting the remote rmxdir to {machine.rmxdir}\n\tsetting jobs suffix to {_hash}')
+            logger.warning(f'--contain flag is set.\n\tsetting the remote rmxdir to {machine.rmxdir}\n\tsetting jobs suffix to {_hash}')
 
         _sync_code(project, machine, runtime_options.dry_run)
 
     env = {**project.env, **machine.env}
     rmxdirs = machine.get_rmxdirs(project.name)
 
-    startup = '&&'.join([e for e in [project.startup, machine.startup] if e.strip()])
+    startup = ' && '.join([e for e in [project.startup, machine.startup] if e.strip()])
 
     # If parsed.mode is not set, try to read from the config file.
     mode = parsed.mode or machine.parsed_conf.get('mode')
     if mode is None:
-        logger.warn('mode is not set. Setting it to SSH mode')
+        logger.warning('mode is not set. Setting it to SSH mode')
         mode = 'ssh'
 
     if mode == 'ssh':
         from rmx.runner import SSHRunner
         ssh_client = SimpleSSHClient(machine.remote_conf)
         ssh_runner = SSHRunner(ssh_client, rmxdirs)
-        ssh_runner.exec(runtime_options.cmd, 
+        print_conf(mode, machine)
+        ssh_runner.exec(runtime_options.cmd,
                         runtime_options.rel_workdir,
                         startup=startup,
                         env=env,
@@ -222,6 +230,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
         if image is None:
             raise KeyError('docker image is not specified.')
 
+        print_conf(mode, machine, image)
         if runtime_options.sweep:
             assert runtime_options.disown, "You must set -d option to use sweep functionality."
             sweep_ind = parse_sweep_idx(runtime_options.sweep)
@@ -229,12 +238,14 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             single_sweep = (len(sweep_ind) == 1)
 
             for sweep_idx in sweep_ind:
+                name = f'{name}-{sweep_idx}'
+                logger.info(f'Launching sweep {sweep_idx}: {name}')
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
                 docker_conf = DockerContainerConfig(
                     image=image,
-                    name=f'{name}-{sweep_idx}',
+                    name=name,
                     mounts=mounts,
-                    env=env
+                    env=env,
                 )
                 docker_runner.exec(runtime_options.cmd,
                                    runtime_options.rel_workdir,
@@ -243,8 +254,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
                                    kill_existing_container=runtime_options.force,
                                    quiet=not single_sweep)
             # import time
-            # logger.warn('Sleeping for 5 seconds to see if the container fails...')
-            # logger.warn('You can safely exit anytime')
+            # logger.warning('Sleeping for 5 seconds to see if the container fails...')
+            # logger.warning('You can safely exit anytime')
             # time.sleep(10)
         else:
             docker_conf = DockerContainerConfig(
@@ -340,6 +351,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             options = ' '.join(options)
             run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=run_opt.cmd)
 
+        print_conf(mode, machine, image=image if mode == 'slurm-sing' else None)
         if run_opt.sweep:
             assert run_opt.disown, "You must set -d option to use sweep functionality."
             sweep_ind = parse_sweep_idx(run_opt.sweep)

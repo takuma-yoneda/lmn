@@ -94,8 +94,8 @@ def load_config(machine_name: str):
     mconf = config['machines'].get(machine_name)
 
     name = pconf.get('name', proj_rootdir.stem)
-    logger.info(f'Project name: {name}')
-    logger.info(f'Project root directory: {proj_rootdir}')
+    logger.info(f'Project name     : {name}')
+    logger.info(f'Project directory: {proj_rootdir}')
 
     mount_dirs = pconf.get('mount', [])
     mount_from_host = pconf.get('mount_from_host', {})
@@ -108,7 +108,7 @@ def load_config(machine_name: str):
     # Load extra env vars from .env.secret
     secret_env = dotenv_values((proj_rootdir / ".env.secret").resolve())
     if secret_env:
-        logger.info(f'Loaded following envs from .env.secret: {dict(secret_env)}')
+        logger.debug(f'Loaded following envs from .env.secret: {dict(secret_env)}')
 
     project_env = pconf.get('environment', {})
     project = Project(name,

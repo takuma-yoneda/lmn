@@ -79,7 +79,7 @@ class SimpleSSHClient:
 
                 # NOTE: if you use asynchronous=True, stdout/stderr does not show up
                 # when you use it on slurm. I have no idea why, tho.
-                logger.info(f'ssh client env: {env}')
+                logger.debug(f'ssh client env: {env}')
                 try:
                     result = self.conn.run(cmd, asynchronous=False, hide=hide, env=env, pty=pty)
                 except invoke.exceptions.UnexpectedExit as e:

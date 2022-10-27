@@ -53,9 +53,10 @@ def core(args):
     parser = global_parser()
     parsed = parser.parse_args(args)
 
+    from logging import INFO, DEBUG
+    logger.setLevel(INFO)
     if parsed.verbose:
-        from logging import INFO
-        logger.setLevel(INFO)
+        logger.setLevel(DEBUG)
 
     # Load config and fuse it with parsed arguments
     from ._config_loader import load_config

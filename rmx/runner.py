@@ -29,8 +29,8 @@ class SSHRunner:
         if startup:
             cmd = f'{startup} && {cmd}'
 
-        logger.info(f'ssh run with command: {cmd}')
-        logger.info(f'cd to {self.rmxdirs.codedir / relative_workdir}')
+        logger.debug(f'ssh run with command: {cmd}')
+        logger.debug(f'cd to {self.rmxdirs.codedir / relative_workdir}')
         rmxenv = get_rmxenvs(cmd, self.rmxdirs)
         allenv = {**env, **rmxenv}
         allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
@@ -54,8 +54,8 @@ class DockerRunner:
         allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
 
         # NOTE: target: container, source: remote host
-        logger.info(f'mounts: {docker_conf.mounts}')
-        logger.info(f'docker_conf: {docker_conf}')
+        logger.debug(f'mounts: {docker_conf.mounts}')
+        logger.debug(f'docker_conf: {docker_conf}')
 
         if docker_conf.tty:
             # TODO: Use dockerpty
@@ -63,7 +63,7 @@ class DockerRunner:
             cmd = f'/bin/bash -c \'{startup} && {cmd} && chmod -R a+rw {str(self.rmxdirs.outdir)} \''
         logger.info(f'docker run with command:{cmd}')
 
-        logger.info(f'container codedir: {str(self.rmxdirs.codedir / relative_workdir)}')
+        logger.debug(f'container codedir: {str(self.rmxdirs.codedir / relative_workdir)}')
 
         if kill_existing_container:
             from docker.errors import NotFound
@@ -74,7 +74,7 @@ class DockerRunner:
                 container = None
             
             if container:
-                logger.warn(f'Removing the existing container: {docker_conf.name}')
+                logger.warning(f'Removing the existing container: {docker_conf.name}')
                 container.remove(force=True)
 
         # NOTE: Consider using Volume rather than Mount
@@ -117,7 +117,7 @@ class DockerRunner:
                                                    device_requests=d.device_requests,
                                                    working_dir=str(self.rmxdirs.codedir / relative_workdir),
                                                 )
-            logger.info(f'container: {container}')
+            logger.debug(f'container: {container}')
 
             def log_stream(stream: Iterable):
                 """print out log stream"""
@@ -166,7 +166,7 @@ class SlurmRunner:
             # Use sbatch and set dependency to singleton
             slurm_conf.dependency = 'singleton'
             if interactive:
-                logger.warn(f'num_sequence is set to {num_sequence} (> 1). Force disabling interactive mode')
+                logger.warning(f'num_sequence is set to {num_sequence} (> 1). Force disabling interactive mode')
                 interactive = False
 
         s = slurm_conf
@@ -216,6 +216,6 @@ class SlurmRunner:
             result = self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),
                                      disown=False, env=allenv, dry_run=dry_run)
             if result.stderr:
-                logger.warn('sbatch job submission failed:', result.stderr)
+                logger.warning('sbatch job submission failed:', result.stderr)
             jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833
             logger.debug(f'jobid {jobid}')

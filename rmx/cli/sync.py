@@ -57,17 +57,22 @@ def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
 
             result = ssh_client.run(f'ls -l {rmxdirs.outdir} | grep -v "^total" | wc -l', hide=True)
             num_output_files = int(result.stdout)
-            logger.info(f'{num_output_files} files are in the output directory')
+
+            msg = f'{num_output_files} files are in the output directory'
+            logger.info(msg)
             if num_output_files > 0:
                 rsync(source_dir=machine.uri(rmxdirs.outdir), target_dir=project.outdir,
                     dry_run=dry_run)
+                logger.info(f'The output files are copied to {str(project.outdir)}')
+
         except OSError:
+            # NOTE: Only show the last stack of traceback (If I remember corectly...)
             import traceback
             import sys
             print(traceback.format_exc(0), file=sys.stderr)
             sys.exit(1)
     else:
-        logger.warn('project.outdir is set to None. Doing nothing here.')
+        logger.warning('project.outdir is set to None. Doing nothing here.')
 
 
 def handler(project: Project, machine: Machine, parsed: Namespace):
