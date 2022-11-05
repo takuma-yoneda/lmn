@@ -249,12 +249,12 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             single_sweep = (len(sweep_ind) == 1)
 
             for sweep_idx in sweep_ind:
-                name = f'{name}-{sweep_idx}'
-                logger.info(f'Launching sweep {sweep_idx}: {name}')
+                _name = f'{name}-{sweep_idx}'
+                logger.info(f'Launching sweep {sweep_idx}: {_name}')
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
                 docker_conf = DockerContainerConfig(
                     image=image,
-                    name=name,
+                    name=_name,
                     mounts=mounts,
                     startup=startup,
                     env=env,

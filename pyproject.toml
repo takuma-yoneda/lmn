@@ -15,6 +15,7 @@ dependencies = [
     "dockerpty>=0.4.1",
     "pyjson5",
     "python-dotenv",
+    "python-on-whales>=0.53.0",
 ]
 requires-python = ">=3.8"
 readme = "README.md"
