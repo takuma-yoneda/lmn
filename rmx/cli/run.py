@@ -321,6 +321,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
 
             image = machine.parsed_conf.get('singularity', {}).get('sif_file')
             overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
+            writable_tmpfs = machine.parsed_conf.get('singularity', {}).get('writable_tmpfs', False)
 
             # Overwrite rmx envvars.  Hmm I don't like this...
             from rmx.cli._config_loader import DOCKER_ROOT_DIR, get_docker_rmxdirs
@@ -351,6 +352,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             # Overlay
             if overlay:
                 options += [f'--overlay {overlay}']
+
+            if writable_tmpfs:
+                # This often solves the following error:
+                # OSError: [Errno 30] Read-only file system
+                options += [f'--writable-tmpfs']
 
             # TEMP: Only for tticslurm
             assert 'CUDA_VISIBLE_DEVICES' not in env, 'CUDA_VISIBLE_DEVICES will be automatically set. You should not specify it manually.'
