@@ -90,6 +90,12 @@ def load_config(machine_name: str):
     proj_rootdir = find_project_root()
     config = parse_config(proj_rootdir)
 
+    if machine_name not in config['machines']:
+        raise KeyError(
+            f'Machine "{machine_name}" not found in the configuration. '
+            f'Available machines are: {" ".join(config["machines"].keys())}'
+        )
+
     pconf = config.get('project', {})
     mconf = config['machines'].get(machine_name)
 
@@ -106,9 +112,17 @@ def load_config(machine_name: str):
         mount_from_host = mconf.get('mount_from_host', {})
 
     # Load extra env vars from .env.secret
-    secret_env = dotenv_values((proj_rootdir / ".env.secret").resolve())
+    secret_env_path = (proj_rootdir / ".secret.env").resolve()
+    if not secret_env_path.is_file():
+        secret_env_path = (proj_rootdir / ".env.secret").resolve()
+
+        # Just a friendly reminder
+        if secret_env_path.is_file():
+            logger.info('Reading from ".env.secret" file will be deprecated in the future. Please rename it to ".secret.env".')
+
+    secret_env = dotenv_values(secret_env_path)
     if secret_env:
-        logger.debug(f'Loaded following envs from .env.secret: {dict(secret_env)}')
+        logger.debug(f'Loaded the following envs from secret env file: {dict(secret_env)}')
 
     project_env = pconf.get('environment', {})
     project = Project(name,
@@ -120,12 +134,6 @@ def load_config(machine_name: str):
                       mount_dirs=mount_dirs,
                       mount_from_host=mount_from_host)
 
-    
-    if machine_name not in config['machines']:
-        raise KeyError(
-            f'Machine "{machine_name}" not found in the configuration. '
-            f'Available machines are: {" ".join(config["machines"].keys())}'
-        )
     user, host = mconf['user'], mconf['host']
     remote_conf = RemoteConfig(user, host)
 
