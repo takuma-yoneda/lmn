@@ -45,7 +45,7 @@ def _get_parser() -> ArgumentParser:
         action="store",
         type=str,
         default=None,
-        choices=["ssh", "docker", "slurm", "singularity", "slurm-sing"],
+        choices=["ssh", "docker", "slurm", "singularity", "slurm-sing", "sing-slurm"],
         help="What mode to run",
     )
     parser.add_argument(
@@ -288,7 +288,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
                                kill_existing_container=runtime_options.force)
 
 
-    elif mode == "slurm" or mode == 'slurm-sing':
+    elif mode in ['slurm', 'slurm-sing', 'sing-slurm']:
         # Slurm specific configurations
         from rmx.config import SlurmConfig
         import randomname
@@ -312,7 +312,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             name = f'{name}--{run_opt.name}'
         slurm_conf.job_name = name
 
-        if mode == 'slurm-sing':
+        if mode in ['slurm-sing', 'sing-slurm']:
             # Decorate run_opt.cmd for Singularity
 
             # sconf = SlurmConfig(job_name, **mconf['slurm'])
@@ -356,7 +356,6 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             assert 'CUDA_VISIBLE_DEVICES' not in env, 'CUDA_VISIBLE_DEVICES will be automatically set. You should not specify it manually.'
             env['CUDA_VISIBLE_DEVICES'] = '$CUDA_VISIBLE_DEVICES'  # This let Singularity container use the envvar on the host
 
-            # TODO: This CANNOT set RMX_RUN_SWEEP_IDX !!
             # Environment variables
             options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
 
@@ -368,14 +367,23 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             options = ' '.join(options)
             run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=run_opt.cmd)
 
-        print_conf(mode, machine, image=image if mode == 'slurm-sing' else None)
+        print_conf(mode, machine, image=image if mode in ['slurm-sing', 'sing-slurm'] else None)
         if run_opt.sweep:
             assert run_opt.disown, "You must set -d option to use sweep functionality."
             sweep_ind = parse_sweep_idx(run_opt.sweep)
 
             _slurm_conf = deepcopy(slurm_conf)
             for sweep_idx in sweep_ind:
+                # NOTE: This special prefix "SINGULARITYENV_" is stripped and the rest is passed to singularity container,
+                # even with --containall or --cleanenv !!
+                # Example: (https://docs.sylabs.io/guides/3.1/user-guide/environment_and_metadata.html?highlight=environment%20variable)
+                #     $ SINGULARITYENV_HELLO=world singularity exec centos7.img env | grep HELLO
+                #     HELLO=world
+                env.update({'SINGULARITYENV_RMX_RUN_SWEEP_IDX': sweep_idx})
+
+                # Oftentimes, a user specifies $RMX_RUN_SWEEP_IDX as an argument to the command, and that will be evaluated right before singularity launches
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
+
                 _slurm_conf.job_name = f'{slurm_conf.job_name}-{sweep_idx}'
                 slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=_slurm_conf,
                                   startup=startup,
