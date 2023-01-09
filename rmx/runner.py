@@ -98,7 +98,7 @@ class DockerRunner:
                 # Use python-on-whales (i.e., docker cli)
                 import python_on_whales
                 whale_client = python_on_whales.DockerClient(host=f'ssh://{self.client.api._custom_adapter.ssh_host}')
-                logger.debug(f'docker run with command:{cmd}')
+                logger.debug(f'docker run with command: {cmd}')
 
                 # NOTE: dockerpy is stupid enough that it cannot attach remote pty.
                 # dockerpty is good but fails when the terminal size changes frantically.
