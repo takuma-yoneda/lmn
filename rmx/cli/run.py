@@ -338,7 +338,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
             # NOTE: Without bash -c '{cmd}', if you put PYTHONPATH=/foo/bar, it fails with no such file or directory 'PYTHONPATH=/foo/bar'
             # TODO: Will the envvars be taken over to the internal shell (by this extra bash command)?
             # sing_cmd = "singularity run --nv --containall {options} {sif_file} bash -c '{cmd}'"
-            sing_cmd = "singularity run --nv --containall {options} {sif_file} {cmd}"
+            sing_cmd = 'singularity run --nv --containall {options} {sif_file} bash -c -- "{cmd}"'
             options = []
 
             # Bind
@@ -371,7 +371,13 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
 
             # Overwrite command
             options = ' '.join(options)
-            run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=run_opt.cmd)
+
+            # Trying my best to escape quotations (https://stackoverflow.com/a/18886646/19913466)
+            logger.debug(f'run_opt.cmd before escape: {run_opt.cmd}')
+            escaped_cmd = run_opt.cmd.encode('unicode-escape').replace(b'"', b'\\"').decode('utf-8')
+            logger.debug(f'run_opt.cmd after escape: {escaped_cmd}')
+
+            run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=escaped_cmd)
 
         print_conf(mode, machine, image=image if mode in ['slurm-sing', 'sing-slurm'] else None)
         if run_opt.sweep:
