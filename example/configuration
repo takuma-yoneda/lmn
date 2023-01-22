@@ -16,13 +16,15 @@
             "user": "takuma",
             "startup": ". ~/.bashrc",
             "root_dir": "/share/data/ripl/takuma/rmx",
+            // For the detailed spec, reading slurm official docs is recommended.
             "slurm": {
                 "partition": "ripl-gpu",
                 "cpus_per_task": 1,
                 "time": "04:00:00",
-                "constraint": "highmem",
+                "constraint": "highmem",  // AND and OR operators are supported (e.g., "highmem&avx", "highmem|avx")
                 "output": "slurm-%j.out.log",
                 "error": "slurm-%j.error.log",
+                "nodelist": "cpu23,cpu-24"  // You can also do things like "cpu[23-27]"
                 "exclude": "gpu-g1,gpu-g3,gpu-g21"
             }
         }

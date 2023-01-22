@@ -258,6 +258,7 @@ class SlurmRunner:
                                      job_name=s.job_name,
                                      partition=s.partition,
                                      time=s.time,
+                                     nodelist=s.nodelist,
                                      exclude=s.exclude,
                                      constraint=s.constraint,
                                      dependency=s.dependency,

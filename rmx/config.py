@@ -105,7 +105,7 @@ class SlurmConfig:
     but that would make it harder to read.
     """
     def __init__(self, job_name: str, partition='cpu', constraint=None, cpus_per_task=1, time=None,  
-                 output=None, error=None, dependency=None, exclude=None, shell='bash', **kwargs) -> None:
+                 output=None, error=None, dependency=None, nodelist=None, exclude=None, shell='bash', **kwargs) -> None:
         self.job_name = job_name
         self.partition = partition
         self.constraint = constraint
@@ -115,6 +115,7 @@ class SlurmConfig:
         self.dependency = dependency
         self.output = output
         self.error = error
+        self.nodelist = nodelist
         self.shell = shell
 
 
