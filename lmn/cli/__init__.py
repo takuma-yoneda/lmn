@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from rmx import __version__
-from rmx import logger
+from lmn import __version__
+from lmn import logger
 import sys
 import argparse
 
@@ -16,7 +16,7 @@ def global_parser():
         "--version",
         action="version",
         version="{} - version {}".format(
-            "RMX", __version__
+            "LMN", __version__
         )
     )
     parser.add_argument(

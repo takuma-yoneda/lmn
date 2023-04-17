@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import os
 from os.path import expandvars
-from rmx.helpers import posixpath2str, replace_rmx_envvars
+from lmn.helpers import posixpath2str, replace_lmn_envvars
 import invoke
 
-from rmx import logger
+from lmn import logger
 
-RMX_DOCKER_ROOTDIR = '/rmx'
+LMN_DOCKER_ROOTDIR = '/lmn'
 
 # NOTE: Should I have ssh-conf, slurm-conf and docker-conf separately??
 # I guess RemoteConfig should ONLY store the info on how to login to the host?

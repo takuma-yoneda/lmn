@@ -1,8 +1,8 @@
 from argparse import ArgumentParser, Namespace
-from rmx import logger
-from rmx.cli._utils import rsync
-from rmx.cli._config_loader import Project, Machine
-from rmx.machine import SimpleSSHClient
+from lmn import logger
+from lmn.cli._utils import rsync
+from lmn.cli._config_loader import Project, Machine
+from lmn.machine import SimpleSSHClient
 
 
 RSYNC_DESTINATION_PATH = "/tmp/".rstrip('/')
@@ -28,16 +28,16 @@ def _sync_code(project: Project, machine: Machine, dry_run: bool = False):
     # rsync_options = f"--rsync-path='mkdir -p {project.remote_dir} && mkdir -p {project.remote_outdir} && mkdir -p {project.remote_mountdir} && rsync'"
 
     # A trick to create directories right before performing rsync
-    rmxdirs = machine.get_rmxdirs(project.name)
-    rsync_options = f"--rsync-path='mkdir -p {rmxdirs.codedir} && mkdir -p {rmxdirs.outdir} && mkdir -p {rmxdirs.mountdir} && rsync'"
+    lmndirs = machine.get_lmndirs(project.name)
+    rsync_options = f"--rsync-path='mkdir -p {lmndirs.codedir} && mkdir -p {lmndirs.outdir} && mkdir -p {lmndirs.mountdir} && rsync'"
 
     try:
-        rsync(source_dir=project.rootdir, target_dir=machine.uri(rmxdirs.codedir),
+        rsync(source_dir=project.rootdir, target_dir=machine.uri(lmndirs.codedir),
                         exclude=project.exclude, options=rsync_options, dry_run=dry_run, transfer_rootdir=False)
 
         # rsync the directories to mount
         for mount_dir in project.mount_dirs:
-            rsync(source_dir=mount_dir, target_dir=machine.uri(rmxdirs.mountdir),
+            rsync(source_dir=mount_dir, target_dir=machine.uri(lmndirs.mountdir),
                                 exclude=project.exclude, dry_run=dry_run)
     except OSError:
         import traceback
@@ -51,17 +51,17 @@ def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
     # Rsync remote outdir with the local outdir.
     if project.outdir:
         try:
-            rmxdirs = machine.get_rmxdirs(project.name)
+            lmndirs = machine.get_lmndirs(project.name)
             # Check if there's any output file (the first line is always 'total [num-files]')
             ssh_client = SimpleSSHClient(machine.remote_conf)
 
-            result = ssh_client.run(f'ls -l {rmxdirs.outdir} | grep -v "^total" | wc -l', hide=True)
+            result = ssh_client.run(f'ls -l {lmndirs.outdir} | grep -v "^total" | wc -l', hide=True)
             num_output_files = int(result.stdout)
 
             msg = f'{num_output_files} files are in the output directory'
             logger.info(msg)
             if num_output_files > 0:
-                rsync(source_dir=machine.uri(rmxdirs.outdir), target_dir=project.outdir,
+                rsync(source_dir=machine.uri(lmndirs.outdir), target_dir=project.outdir,
                     dry_run=dry_run)
                 logger.info(f'The output files are copied to {str(project.outdir)}')
 

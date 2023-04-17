@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import unittest
-from rmx.helpers import parse_config, merge_nested_dict, remove_recursively
+from lmn.helpers import parse_config, merge_nested_dict, remove_recursively
 
 class TestMergeDicts(unittest.TestCase):
     def test_flat_dict(self):

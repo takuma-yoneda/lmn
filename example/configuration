@@ -1,4 +1,4 @@
-// You have to save this as either "~/.config/rmx" or "<project-directory>/.rmx.config".
+// You have to save this as either "~/.config/lmn" or "<project-directory>/.lmn.config".
 {
     "machines": {
         // machine descriptions go here
@@ -15,7 +15,7 @@
             "host": "slurm.ttic.edu",
             "user": "takuma",
             "startup": ". ~/.bashrc",
-            "root_dir": "/share/data/ripl/takuma/rmx",
+            "root_dir": "/share/data/ripl/takuma/lmn",
             // For the detailed spec, reading slurm official docs is recommended.
             "slurm": {
                 "partition": "ripl-gpu",

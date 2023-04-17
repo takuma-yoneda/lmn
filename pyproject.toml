@@ -1,7 +1,7 @@
 [project]
-name = "rmx"
+name = "lmn"
 version = "0.2.4rc1"
-description = "Remote code deployment and execution for ML researchers."
+description = "LMN: LaMbda functions across servers for Noobs"
 authors = [
     {name = "Takuma Yoneda", email = "takuma-yoneda@users.noreply.github.com"},
     {name = "Takuma Yoneda",email = "takuma.ynd@gmail.com"}
@@ -32,9 +32,9 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
 ]
 [project.urls]
-Homepage = "https://github.com/takuma-yoneda/rmx"
+Homepage = "https://github.com/takuma-yoneda/lmn"
 [project.scripts]
-rmx = "rmx.cli:main"
+lmn = "lmn.cli:main"
 
 [tool.pdm]
 package-dir = "."

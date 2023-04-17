@@ -4,17 +4,17 @@ from argparse import Namespace
 import os
 import pathlib
 from pathlib import Path
-from rmx import logger
-from rmx.helpers import find_project_root, parse_config
+from lmn import logger
+from lmn.helpers import find_project_root, parse_config
 from posixpath import expandvars
 from dotenv import dotenv_values
 
-from rmx.machine import RemoteConfig
+from lmn.machine import RemoteConfig
 
-DOCKER_ROOT_DIR = '/rmx'
+DOCKER_ROOT_DIR = '/lmn'
 
-# NOTE: I used to set it to /tmp/rmx, but that causes an issue:
-# When multiple users use this directory, the one who used this first set the permission of /tmp/rmx
+# NOTE: I used to set it to /tmp/lmn, but that causes an issue:
+# When multiple users use this directory, the one who used this first set the permission of /tmp/lmn
 # to be his/hers, thus others trying to use it later cannot access it.
 REMOTE_ROOT_DIR = '/tmp'
 
@@ -49,12 +49,12 @@ class Machine:
     """Maintains machine configuration.
     - RemoteConfig (user, hostname, uri)
     """
-    def __init__(self, remote_conf: RemoteConfig, rmxdir: str | Path,
+    def __init__(self, remote_conf: RemoteConfig, lmndir: str | Path,
                  parsed_conf: dict,
                  startup: str = "",
                  env: dict | None = None) -> None:
         self.remote_conf = remote_conf
-        self.rmxdir = Path(rmxdir)
+        self.lmndir = Path(lmndir)
         self.env = env if env is not None else {}
         self.startup = startup
         self.parsed_conf = parsed_conf
@@ -68,8 +68,8 @@ class Machine:
         """Returns user@hostname:path"""
         return f'{self.remote_conf.base_uri}:{path}'
     
-    def get_rmxdirs(self, project_name: str) -> Namespace:
-        rootdir = self.rmxdir / project_name
+    def get_lmndirs(self, project_name: str) -> Namespace:
+        rootdir = self.lmndir / project_name
         return Namespace(
             codedir=str(rootdir / 'code'),
             mountdir=str(rootdir / 'mount'),
@@ -77,8 +77,8 @@ class Machine:
         )
 
 
-def get_docker_rmxdirs(rmxdir: Path | str, project_name: str) -> Namespace:
-        rootdir = Path(rmxdir) / project_name
+def get_docker_lmndirs(lmndir: Path | str, project_name: str) -> Namespace:
+        rootdir = Path(lmndir) / project_name
         return Namespace(
             codedir=str(rootdir / 'code'),
             mountdir=str(rootdir / 'mount'),
@@ -148,7 +148,7 @@ def load_config(machine_name: str):
 
     machine = Machine(remote_conf,
                       parsed_conf=mconf,
-                      rmxdir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}/rmx'),
+                      lmndir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}/lmn'),
                       env=mconf.get('environment', {}))
 
     return project, machine, preset_conf

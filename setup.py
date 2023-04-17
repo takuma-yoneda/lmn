@@ -3,21 +3,21 @@ import pathlib
 from setuptools import find_packages, setup
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
-exec((BASE_DIR / "rmx/_version.py").read_text())
+exec((BASE_DIR / "lmn/_version.py").read_text())
 
 
 setup(
-    name="rmx",
+    name="lmn",
     version=__version__,  # type: ignore[name-defined]  # NOQA: F821
     packages=find_packages(),
     description=(
-        "Remote code deployment and execution for ML researchers."
+        "LMN: LaMbda functions across servers for Noobs"
     ),
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="Takuma Yoneda",
     author_email="takuma.ynd@gmail.com",
-    url="https://github.com/takuma-yoneda/rmx",
+    url="https://github.com/takuma-yoneda/lmn",
     license="MIT License",
     classifiers=[
         "Programming Language :: Python :: 3.6",
@@ -41,7 +41,7 @@ setup(
     #     ],
     # },
     # package_data={"pysen": ["py.typed"]},
-    # package_dir={'rmx': 'rmx'} <-- This works for release, but not for editable install!! (https://stackoverflow.com/a/67238346/7057866)
+    # package_dir={'lmn': 'lmn'} <-- This works for release, but not for editable install!! (https://stackoverflow.com/a/67238346/7057866)
     package_dir={'': '.'},
-    entry_points={"console_scripts": ["rmx=rmx.cli:main"]},
+    entry_points={"console_scripts": ["lmn=lmn.cli:main"]},
 )

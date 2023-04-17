@@ -44,24 +44,27 @@ def merge_nested_dict(a, b, path=None, conflict='use_b'):
     return a
 
 
-def parse_config(project_root, global_conf_paths=['${HOME}/.rmx.config', '${HOME}/.config/rmx']):
-    """ Parse rmx config (json file)
+def parse_config(project_root, global_conf_paths=['${HOME}/.lmn.json5', '${HOME}/.config/lmn.json5']):
+    """ Parse lmn config (json file)
 
     It looks for config file in this order:
-    1. {project_root}/.rmx.config
-    2. $HOME/.rmx.config
-    3. $HOME/.config/rmx
+    1. {project_root}/.lmn.config
+    2. $HOME/.lmn.config
+    3. $HOME/.config/lmn
     """
     import pyjson5 as json
 
     from os.path import expandvars, isfile
-    from rmx import logger
+    from lmn import logger
 
     def _maybe_load(path):
         if isfile(path):
             with open(path, 'r') as f:
                 return json.load(f)
         return {}
+
+    # Backward compatibility
+    global_conf_paths += ['${HOME}/.rmx.config', '${HOME}/.config/rmx']
 
     # TODO: Hmmm... a better way to write this config search algorithm?
     path_found = False
@@ -75,40 +78,30 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.rmx.config', '${HOME
         with open(path, 'r') as f:
             global_conf = json.load(f)
     else:
-        logger.warning('rmx global config file cannot be located.')
+        logger.warning('lmn global config file cannot be located.')
         global_conf = {}
 
-    local_conf = _maybe_load(f'{project_root}/.rmx.config')
+    local_conf = _maybe_load(f'{project_root}/.lmn.json5')
 
-    global_conf = remove_recursively(global_conf, key='__help')
-    local_conf = remove_recursively(local_conf, key='__help')
+    # Backward compatibility
+    if not local_conf:
+        local_conf = _maybe_load(f'{project_root}/.rmx.config')
 
     merged_conf = merge_nested_dict(global_conf, local_conf)
     return merged_conf
-
-def remove_recursively(config_dict, key='__help'):
-    """remove entry with the specified key recursively."""
-    for k in list(config_dict.keys()):
-        if k == key:
-            del config_dict[k]
-            continue
-        if isinstance(config_dict[k], dict):
-            config_dict[k] = remove_recursively(config_dict[k], key=key)
-
-    return config_dict
 
 
 def find_project_root():
     """Find a project root (which is rsync-ed with the remote server).
 
-    It first goes up in the directory tree to find ".git" or ".rmx.config" file.
+    It first goes up in the directory tree to find ".git" or ".lmn.config" file.
     If not found, print warning and just use the current directory
     """
-    from rmx import logger
+    from lmn import logger
     def is_proj_root(directory: Path):
         if (directory / '.git').is_dir():
             return True
-        if (directory / '.rmx.config').is_file():
+        if (directory / '.lmn.config').is_file():
             return True
         return False
 
@@ -120,7 +113,7 @@ def find_project_root():
         if is_proj_root(directory):
             return directory
 
-    logger.warning('.git directory or .rmx file not found in the ancestor directories.\n'
+    logger.warning('.git directory or .lmn file not found in the ancestor directories.\n'
                 'Setting project root to current directory')
 
     assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."
@@ -128,11 +121,11 @@ def find_project_root():
     return current_dir
 
 
-
 TIMESTAMP_FORMAT = '%Y-%m-%d_%H%M%S-%f'
 from datetime import datetime
 def get_timestamp() -> str:
     return datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
+
 
 def read_timestamp(time_str: str) -> datetime:
     return datetime.strptime(time_str, TIMESTAMP_FORMAT)
@@ -150,7 +143,7 @@ def parse_sacct(sacct_output):
     keys = lines[0].split('|')
     entries = [{key: entry for key, entry in zip(keys, line.split('|'))} for line in lines[1:]]
     # NOTE: For a batch job, sacct shows two entries for one job submission:
-    # {'JobID': '8231686', 'JobName': 'rmx-iti-coped-chief-97', ... 'MaxRSS': ''},
+    # {'JobID': '8231686', 'JobName': 'lmn-iti-coped-chief-97', ... 'MaxRSS': ''},
     # {'JobID': '8231686.batch', 'JobName': 'batch', ... 'MaxRSS': '64844148K'}
     # We should merge these into one.
     # TEMP: Forget about MaxRSS, and just remove all entries with *.batch
@@ -174,39 +167,32 @@ def defreeze_dict(frozen_dict: frozenset):
     return {key: val for key, val in frozen_dict}
 
 
-def replace_rmx_envvars(query: str, rmxenvs: dict):
+def replace_lmn_envvars(query: str, lmnenvs: dict):
     """
-    Replace RMX_* envvars (i.e., ${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR}) with actual path
-    Args
-      query (string): input string to process
-      rmxenvs (dict): map from RMX_* envvars to actual paths
+    Replace LMN_* envvars (i.e., ${LMN_CODE_DIR}, ${LMN_OUTPUT_DIR}, ${LMN_MOUNT_DIR}) with actual path.
+
+    Args:
+      - query (string): input string to process
+      - lmnenvs (dict): map from LMN_* envvars to actual paths
+
     """
     import re
-    rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
-    for original in rmx_envvars:
+    lmn_envvars = ['LMN_CODE_DIR', 'LMN_OUTPUT_DIR', 'LMN_MOUNT_DIR']
+
+    # Backward compatibility
+    lmn_envvars += ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
+
+    for original in lmn_envvars:
         # Match "${original}" or "$original"
-        regex = r'{}'.format('(\$\{' + original + '\}' + f'|\$' + original + ')')
-        target = rmxenvs[original]
+        regex = r'{}'.format('(\$\{' + original + '\}' + '|\$' + original + ')')
+        target = lmnenvs[original]
         query = re.sub(regex, str(target), str(query))
     return query
 
 
-# def replace_rmx_envvars(env: dict):
-#     import re
-#     # Replace RMX_* envvars: (${RMX_CODE_DIR}, ${RMX_OUTPUT_DIR}, ${RMX_MOUNT_DIR})
-#     # This cannot happen automatically on remote server side, since we set these envvars exactly at the same time as other envvars.
-#     rmx_envvars = ['RMX_CODE_DIR', 'RMX_OUTPUT_DIR', 'RMX_MOUNT_DIR']
-#     for original in rmx_envvars:
-#         # Match "${original}" or "$original"
-#         regex = r'{}'.format('(\$\{' + original + '\}' + f'|\$' + original + ')')
-#         target = str(env[original])
-#         env = {key: re.sub(regex, target, str(val)) for key, val in env.items()}
-#     return env
-
-
 from os.path import expandvars
 class LaunchLogManager:
-    def __init__(self, path=expandvars('$HOME/.rmx/launched.jsonl')) -> None:
+    def __init__(self, path=expandvars('$HOME/.lmn/launched.jsonl')) -> None:
         self.path = path
 
     def _refresh(self):

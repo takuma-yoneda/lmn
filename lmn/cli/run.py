@@ -4,14 +4,14 @@ import os
 from pathlib import Path
 from argparse import ArgumentParser
 from argparse import Namespace
-from rmx import logger
-from rmx.helpers import find_project_root
-from rmx.config import SlurmConfig
-from rmx.helpers import replace_rmx_envvars
-from rmx.cli._config_loader import Project, Machine
-from rmx.machine import SimpleSSHClient
+from lmn import logger
+from lmn.helpers import find_project_root
+from lmn.config import SlurmConfig
+from lmn.helpers import replace_lmn_envvars
+from lmn.cli._config_loader import Project, Machine
+from lmn.machine import SimpleSSHClient
 
-from rmx.runner import SlurmRunner
+from lmn.runner import SlurmRunner
 from .sync import _sync_output, _sync_code
 
 
@@ -98,7 +98,7 @@ def _get_parser() -> ArgumentParser:
         "--sweep",
         action="store",
         type=str,
-        help="specify sweep range (e.g., --sweep 0-255) this changes the value of $RMX_RUN_SWEEP_IDX"
+        help="specify sweep range (e.g., --sweep 0-255) this changes the value of $LMN_RUN_SWEEP_IDX"
     )
     parser.add_argument(
         "remote_command",
@@ -177,22 +177,22 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
     if not parsed.no_sync:
         if parsed.contain:
-            # Generate a unique path and set it to machine.rmxdir
+            # Generate a unique path and set it to machine.lmndir
             # BUG: This generates the same hash every time!! This stack overflow answer is obviously wrong: https://stackoverflow.com/a/6048639/19913466
             # import hashlib
             # import time
             # hashlib.sha1().update(str(time.time()).encode("utf-8"))
             # _hash = hashlib.sha1().hexdigest()
-            from rmx.helpers import get_timestamp
+            from lmn.helpers import get_timestamp
             _hash = get_timestamp()
-            machine.rmxdir = Path(f'{machine.rmxdir}/{_hash}')
+            machine.lmndir = Path(f'{machine.lmndir}/{_hash}')
             runtime_options.name = _hash
-            logger.warning(f'--contain flag is set.\n\tsetting the remote rmxdir to {machine.rmxdir}\n\tsetting jobs suffix to {_hash}')
+            logger.warning(f'--contain flag is set.\n\tsetting the remote lmndir to {machine.lmndir}\n\tsetting jobs suffix to {_hash}')
 
         _sync_code(project, machine, runtime_options.dry_run)
 
     env = {**project.env, **machine.env}
-    rmxdirs = machine.get_rmxdirs(project.name)
+    lmndirs = machine.get_lmndirs(project.name)
 
     startup = ' && '.join([e for e in [project.startup, machine.startup] if e.strip()])
 
@@ -203,9 +203,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         mode = 'ssh'
 
     if mode == 'ssh':
-        from rmx.runner import SSHRunner
+        from lmn.runner import SSHRunner
         ssh_client = SimpleSSHClient(machine.remote_conf)
-        ssh_runner = SSHRunner(ssh_client, rmxdirs)
+        ssh_runner = SSHRunner(ssh_client, lmndirs)
         print_conf(mode, machine)
         ssh_runner.exec(runtime_options.cmd,
                         runtime_options.rel_workdir,
@@ -215,14 +215,14 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
     elif mode == 'docker':
         from docker import DockerClient
-        from rmx.runner import DockerRunner
-        from rmx.config import DockerContainerConfig
+        from lmn.runner import DockerRunner
+        from lmn.config import DockerContainerConfig
         base_url = "ssh://" + machine.base_uri
         # client = DockerClient(base_url=base_url, use_ssh_client=True)
         client = DockerClient(base_url=base_url)  # dockerpty hangs with use_ssh_client=True
 
         # Specify job name
-        name = f'{machine.user}-rmx-{project.name}'
+        name = f'{machine.user}-lmn-{project.name}'
         if runtime_options.name is not None:
             name = f'{name}--{runtime_options.name}'
 
@@ -230,18 +230,18 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             raise ValueError('dry run is not yet supported for Docker mode')
 
         from docker.types import Mount
-        from rmx.cli._config_loader import DOCKER_ROOT_DIR, get_docker_rmxdirs
-        docker_rmxdirs = get_docker_rmxdirs(DOCKER_ROOT_DIR, project.name)
+        from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
+        docker_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
         if not runtime_options.no_sync:
-            mounts = [Mount(target=docker_rmxdirs.codedir, source=rmxdirs.codedir, type='bind'),
-                    Mount(target=docker_rmxdirs.outdir, source=rmxdirs.outdir, type='bind'),
-                    Mount(target=docker_rmxdirs.mountdir, source=rmxdirs.mountdir, type='bind')]
+            mounts = [Mount(target=docker_lmndirs.codedir, source=lmndirs.codedir, type='bind'),
+                    Mount(target=docker_lmndirs.outdir, source=lmndirs.outdir, type='bind'),
+                    Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind')]
         else:
             mounts = []
         mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
 
-        docker_runner = DockerRunner(client, docker_rmxdirs)
+        docker_runner = DockerRunner(client, docker_lmndirs)
 
         # Docker specific configurations
         docker_pconf = machine.parsed_conf.get('docker', {})
@@ -276,7 +276,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             for sweep_idx in sweep_ind:
                 _name = f'{name}-{sweep_idx}'
                 logger.info(f'Launching sweep {sweep_idx}: {_name}')
-                env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
+                env.update({'LMN_RUN_SWEEP_IDX': sweep_idx})
                 docker_conf = DockerContainerConfig(
                     image=image,
                     name=_name,
@@ -315,7 +315,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
     elif mode in ['slurm', 'slurm-sing', 'sing-slurm']:
         # Slurm specific configurations
-        from rmx.config import SlurmConfig
+        from lmn.config import SlurmConfig
         import randomname
         import random
         if 'slurm' not in machine.parsed_conf:
@@ -324,7 +324,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         # NOTE: slurm seems to be fine with duplicated name.
         proj_name_maxlen = 15
         rand_num = random.randint(0, 100)
-        job_name = f'rmx-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
+        job_name = f'lmn-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
 
         # Parse from slurm config options (aside from default)
         if parsed.sconf is not None:
@@ -339,11 +339,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
         # logger.info(f'slurm_conf: {machine.sconf}')
         ssh_client = SimpleSSHClient(machine.remote_conf)
-        slurm_runner = SlurmRunner(ssh_client, rmxdirs)
+        slurm_runner = SlurmRunner(ssh_client, lmndirs)
         run_opt = runtime_options
 
         # Specify job name
-        name = f'{machine.user}-rmx-{project.name}'
+        name = f'{machine.user}-lmn-{project.name}'
         if runtime_options.name is not None:
             name = f'{name}--{run_opt.name}'
         slurm_conf.job_name = name
@@ -359,15 +359,22 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
             writable_tmpfs = machine.parsed_conf.get('singularity', {}).get('writable_tmpfs', False)
 
-            # Overwrite rmx envvars.  Hmm I don't like this...
-            from rmx.cli._config_loader import DOCKER_ROOT_DIR, get_docker_rmxdirs
-            sing_rmxdirs = get_docker_rmxdirs(DOCKER_ROOT_DIR, project.name)
+            # Overwrite lmn envvars.  Hmm I don't like this...
+            from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
+            sing_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
             # TODO: Do we need this??
             env.update({
-                'RMX_CODE_DIR': sing_rmxdirs.codedir, 
-                'RMX_MOUNT_DIR': sing_rmxdirs.mountdir,
-                'RMX_OUTPUT_DIR': sing_rmxdirs.outdir
+                'LMN_CODE_DIR': sing_lmndirs.codedir, 
+                'LMN_MOUNT_DIR': sing_lmndirs.mountdir,
+                'LMN_OUTPUT_DIR': sing_lmndirs.outdir
+            })
+
+            # Backward compat
+            env.update({
+                'RMX_CODE_DIR': sing_lmndirs.codedir,
+                'RMX_MOUNT_DIR': sing_lmndirs.mountdir,
+                'RMX_OUTPUT_DIR': sing_lmndirs.outdir
             })
 
             # NOTE: Without --containall, nvidia-smi command fails with "couldn't find libnvidia-ml.so library in your system."
@@ -380,9 +387,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             # Bind
             bind = '-B {source}:{target}'
             if not runtime_options.no_sync:
-                options += [bind.format(target=sing_rmxdirs.codedir, source=rmxdirs.codedir),
-                        bind.format(target=sing_rmxdirs.outdir, source=rmxdirs.outdir),
-                        bind.format(target=sing_rmxdirs.mountdir, source=rmxdirs.mountdir)]
+                options += [bind.format(target=sing_lmndirs.codedir, source=lmndirs.codedir),
+                            bind.format(target=sing_lmndirs.outdir, source=lmndirs.outdir),
+                            bind.format(target=sing_lmndirs.mountdir, source=lmndirs.mountdir)]
             options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
 
             # Overlay
@@ -392,7 +399,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             if writable_tmpfs:
                 # This often solves the following error:
                 # OSError: [Errno 30] Read-only file system
-                options += [f'--writable-tmpfs']
+                options += ['--writable-tmpfs']
 
             # TEMP: Only for tticslurm
             assert 'CUDA_VISIBLE_DEVICES' not in env, 'CUDA_VISIBLE_DEVICES will be automatically set. You should not specify it manually.'
@@ -402,7 +409,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
 
             # Workdir
-            _workdir = sing_rmxdirs.codedir / runtime_options.rel_workdir
+            _workdir = sing_lmndirs.codedir / runtime_options.rel_workdir
             options += [f'--pwd {_workdir}']
 
             # Overwrite command
@@ -427,10 +434,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 # Example: (https://docs.sylabs.io/guides/3.1/user-guide/environment_and_metadata.html?highlight=environment%20variable)
                 #     $ SINGULARITYENV_HELLO=world singularity exec centos7.img env | grep HELLO
                 #     HELLO=world
-                env.update({'SINGULARITYENV_RMX_RUN_SWEEP_IDX': sweep_idx})
+                env.update({'SINGULARITYENV_LMN_RUN_SWEEP_IDX': sweep_idx})
 
-                # Oftentimes, a user specifies $RMX_RUN_SWEEP_IDX as an argument to the command, and that will be evaluated right before singularity launches
-                env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
+                # Oftentimes, a user specifies $LMN_RUN_SWEEP_IDX as an argument to the command,
+                # and that will be evaluated right before singularity launches
+                env.update({'LMN_RUN_SWEEP_IDX': sweep_idx})
 
                 _name = f'{slurm_conf.job_name}-{sweep_idx}'
                 logger.info(f'Launching sweep {sweep_idx}: {_name}')

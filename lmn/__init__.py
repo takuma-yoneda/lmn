@@ -24,5 +24,5 @@ handler.setFormatter(colorlog.ColoredFormatter(
 ))
 
 
-logger = colorlog.getLogger('rmx')
+logger = colorlog.getLogger('lmn')
 logger.addHandler(handler)

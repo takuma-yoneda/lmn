@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import subprocess
-from rmx import logger
+from lmn import logger
 
 def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, transfer_rootdir=True):
     """

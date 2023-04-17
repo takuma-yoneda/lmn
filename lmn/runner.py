@@ -2,23 +2,31 @@ from __future__ import annotations
 from argparse import Namespace
 from typing import Iterable
 import threading
-from rmx import logger
+from lmn import logger
 from docker import DockerClient
-from rmx.config import DockerContainerConfig
-from rmx.machine import SimpleSSHClient
-from rmx.helpers import replace_rmx_envvars
+from lmn.config import DockerContainerConfig
+from lmn.machine import SimpleSSHClient
+from lmn.helpers import replace_lmn_envvars
 
-def get_rmxenvs(cmd: str, rmxdirs: Namespace):
-    return {'RMX_CODE_DIR': rmxdirs.codedir, 
-            'RMX_MOUNT_DIR': rmxdirs.mountdir,
-            'RMX_OUTPUT_DIR': rmxdirs.outdir,
-            'RMX_USER_COMMAND': cmd}
+def get_lmnenvs(cmd: str, lmndirs: Namespace):
+    envvars = {
+        "LMN_CODE_DIR": lmndirs.codedir,
+        "LMN_MOUNT_DIR": lmndirs.mountdir,
+        "LMN_OUTPUT_DIR": lmndirs.outdir,
+        "LMN_USER_COMMAND": cmd,
+    }
+
+    # Provide RMX_* envvars for backward compatibility
+    return {
+        **envvars,
+        **{key.replace("LMN", "RMX"): val for key, val in envvars.items()},
+    }
 
 
 class SSHRunner:
-    def __init__(self, client: SimpleSSHClient, rmxdirs: Namespace) -> None:
+    def __init__(self, client: SimpleSSHClient, lmndirs: Namespace) -> None:
         self.client = client
-        self.rmxdirs = rmxdirs
+        self.lmndirs = lmndirs
 
     def exec(self, cmd: str, relative_workdir, env: dict | None = None, startup: str = "", dry_run: bool = False,
              disown: bool = False):
@@ -30,18 +38,18 @@ class SSHRunner:
             cmd = f'{startup} && {cmd}'
 
         logger.debug(f'ssh run with command: {cmd}')
-        logger.debug(f'cd to {self.rmxdirs.codedir / relative_workdir}')
-        rmxenv = get_rmxenvs(cmd, self.rmxdirs)
-        allenv = {**env, **rmxenv}
-        allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
-        return self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),
+        logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
+        lmnenv = get_lmnenvs(cmd, self.lmndirs)
+        allenv = {**env, **lmnenv}
+        allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
+        return self.client.run(cmd, directory=(self.lmndirs.codedir / relative_workdir),
                                disown=disown, env=allenv, dry_run=dry_run, pty=True)
 
 
 class DockerRunner:
-    def __init__(self, client: DockerClient, rmxdirs: Namespace) -> None:
+    def __init__(self, client: DockerClient, lmndirs: Namespace) -> None:
         self.client = client
-        self.rmxdirs = rmxdirs
+        self.lmndirs = lmndirs
 
     def exec(self, cmd: str, relative_workdir, docker_conf: DockerContainerConfig,
              kill_existing_container: bool = True, interactive: bool = True, quiet: bool = False,
@@ -49,16 +57,16 @@ class DockerRunner:
         if log_stderr_background:
             assert not interactive, 'log_stderr_background=True cannot be used with interactive=True'
 
-        rmxenv = get_rmxenvs(cmd, self.rmxdirs)
-        allenv = {**docker_conf.env, **rmxenv}
-        allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
+        lmnenv = get_lmnenvs(cmd, self.lmndirs)
+        allenv = {**docker_conf.env, **lmnenv}
+        allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
 
         # NOTE: target: container, source: remote host
         logger.debug(f'mounts: {docker_conf.mounts}')
         logger.debug(f'docker_conf: {docker_conf}')
 
 
-        logger.debug(f'container codedir: {str(self.rmxdirs.codedir / relative_workdir)}')
+        logger.debug(f'container codedir: {str(self.lmndirs.codedir / relative_workdir)}')
 
         if kill_existing_container:
             from docker.errors import NotFound
@@ -89,7 +97,7 @@ class DockerRunner:
 
         if docker_conf.startup:
             cmd = ' && '.join((docker_conf.startup, cmd))
-        cmd = f'{cmd} && chmod -R a+rw {str(self.rmxdirs.outdir)}'
+        cmd = f'{cmd} && chmod -R a+rw {str(self.lmndirs.outdir)}'
 
         if interactive:
             assert d.tty
@@ -108,7 +116,7 @@ class DockerRunner:
                 # options = [
                 #     '-it',
                 #     '--gpus', 'all',
-                #     '--workdir', str(self.rmxdirs.codedir / relative_workdir),
+                #     '--workdir', str(self.lmndirs.codedir / relative_workdir),
                 #     '--user', d.user_id,
                 #     '--name', d.name,
                 # ]
@@ -150,7 +158,7 @@ class DockerRunner:
                         remove=True,
                         tty=True,
                         user=f'{d.user_id}:{d.group_id}',
-                        workdir=str(self.rmxdirs.codedir / relative_workdir),
+                        workdir=str(self.lmndirs.codedir / relative_workdir),
                     )
                 except python_on_whales.exceptions.DockerException as e:
                     # NOTE: hide error as the exception is also raised when the command in the container returns non-zero exit value.
@@ -176,7 +184,7 @@ class DockerRunner:
                                                           mounts=d.mounts,
                                                           environment=allenv,
                                                           device_requests=d.device_requests,
-                                                          working_dir=str(self.rmxdirs.codedir / relative_workdir),
+                                                          working_dir=str(self.lmndirs.codedir / relative_workdir),
                                                           user=f'{d.user_id}:{d.group_id}',
                                                           # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
                                                     )
@@ -198,7 +206,7 @@ class DockerRunner:
                                                    mounts=d.mounts,
                                                    environment=allenv,
                                                    device_requests=d.device_requests,
-                                                   working_dir=str(self.rmxdirs.codedir / relative_workdir),
+                                                   working_dir=str(self.lmndirs.codedir / relative_workdir),
                                                    user=f'{d.user_id}:{d.group_id}',
                                                 )
             logger.debug(f'container: {container}')
@@ -233,9 +241,9 @@ class SlurmRunner:
     If your local machine has slurm (i.e., you're on slurm login-node), I guess you don't need this tool.
     Thus SlurmMachine inherits SSHMachine.
     """
-    def __init__(self, client: SimpleSSHClient, rmxdirs: Namespace) -> None:
+    def __init__(self, client: SimpleSSHClient, lmndirs: Namespace) -> None:
         self.client = client
-        self.rmxdirs = rmxdirs
+        self.lmndirs = lmndirs
 
     def exec(self, cmd: str, relative_workdir, slurm_conf, env: dict | None = None,
              startup: str = "", num_sequence: int = 1,
@@ -269,9 +277,9 @@ class SlurmRunner:
             # User may expect stdout shown on the console.
             logger.info('--output/--error argument for Slurm is ignored in interactive mode.')
 
-        rmxenv = get_rmxenvs(cmd, self.rmxdirs)
-        allenv = {**env, **rmxenv}
-        allenv = {key: replace_rmx_envvars(val, rmxenv) for key, val in allenv.items()}
+        lmnenv = get_lmnenvs(cmd, self.lmndirs)
+        allenv = {**env, **lmnenv}
+        allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
 
         if startup:
             cmd = f'{startup} && {cmd}'
@@ -279,7 +287,7 @@ class SlurmRunner:
         if interactive:
             # cmd = f'{shell} -i -c \'{cmd}\''
             # Create a temp bash file and put it on the remote server.
-            workdir = self.rmxdirs.codedir / relative_workdir
+            workdir = self.lmndirs.codedir / relative_workdir
             exec_file = f"#!/usr/bin/env {s.shell}\n{cmd}"
             logger.debug(f'exec file: {exec_file}')
             from io import StringIO
@@ -295,10 +303,10 @@ class SlurmRunner:
         else:
             cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {s.shell}')
             logger.debug(f'sbatch mode:\n{cmd}')
-            logger.debug(f'cd to {self.rmxdirs.codedir / relative_workdir}')
+            logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
 
             cmd = '\n'.join([cmd] * num_sequence)
-            result = self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),
+            result = self.client.run(cmd, directory=(self.lmndirs.codedir / relative_workdir),
                                      disown=False, env=allenv, dry_run=dry_run)
             if result.stderr:
                 logger.warning('sbatch job submission failed:', result.stderr)

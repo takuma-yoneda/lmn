@@ -1,6 +1,6 @@
 # Example Project
 ## Local config file
-`.rmx.config` file in this directory looks like this:
+`.lmn.config` file in this directory looks like this:
 
 ``` json
 {
@@ -26,7 +26,7 @@
 
 ## Execution
 
-When you run `rmx run <remote-machine> <command-to-execute>`, RMX will
+When you run `lmn run <remote-machine> <command-to-execute>`, LMN will
 1. Copy the contents of `your-awesome-project` to `<remote-machine>:/tmp/your-awesome-project/code/`
 2. Copy the credential file `some-credential` to `<remote-machine>:/tmp/your-awesome-project/mount/`
 4. Create `<remote-machine>:/tmp/your-awesome-project/output` directory to store output
@@ -36,14 +36,14 @@ When you run `rmx run <remote-machine> <command-to-execute>`, RMX will
 **In action**
 
 ```console
-you@local$ rmx run birch --mode ssh --verbose 'hostname && pwd && env'
-rmx - Remote code execution for ML researchers - v0.0.1
+you@local$ lmn run birch --mode ssh --verbose 'hostname && pwd && env'
+lmn - Remote code execution for ML researchers - v0.0.1
 birch
 /tmp/project/code
 YOUR_ENV_VAR=whatever value
-RMX_CODE_DIR=/tmp/project/code
-RMX_MOUNT_DIR=/tmp/project/mount
-RMX_OUTPUT_DIR=/tmp/project/output
+lmn_CODE_DIR=/tmp/project/code
+lmn_MOUNT_DIR=/tmp/project/mount
+lmn_OUTPUT_DIR=/tmp/project/output
 ...
 ```
 
