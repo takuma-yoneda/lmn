@@ -50,9 +50,9 @@ class Machine:
     - RemoteConfig (user, hostname, uri)
     """
     def __init__(self, remote_conf: RemoteConfig, rmxdir: str | Path,
+                 parsed_conf: dict,
                  startup: str = "",
-                 env: dict | None = None,
-                 parsed_conf: dict | None = None) -> None:
+                 env: dict | None = None) -> None:
         self.remote_conf = remote_conf
         self.rmxdir = Path(rmxdir)
         self.env = env if env is not None else {}
@@ -97,7 +97,16 @@ def load_config(machine_name: str):
         )
 
     pconf = config.get('project', {})
+
+    if machine_name not in config['machines']:
+        raise KeyError(f'The specified machine {machine_name} is not found in the configuration file.')
     mconf = config['machines'].get(machine_name)
+
+    # Parse special config params
+    preset_conf = {
+        'slurm-configs': config.get('slurm-configs', {}),
+        'docker-images': config.get('docker-images', {}),
+    }
 
     name = pconf.get('name', proj_rootdir.stem)
     logger.info(f'Project name     : {name}')
@@ -138,8 +147,8 @@ def load_config(machine_name: str):
     remote_conf = RemoteConfig(user, host)
 
     machine = Machine(remote_conf,
+                      parsed_conf=mconf,
                       rmxdir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}/rmx'),
-                      env=mconf.get('environment', {}),
-                      parsed_conf=mconf)
+                      env=mconf.get('environment', {}))
 
-    return project, machine
+    return project, machine, preset_conf

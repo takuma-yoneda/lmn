@@ -32,12 +32,22 @@ def _get_parser() -> ArgumentParser:
     parser.add_argument(
         "--image",
         default=None,
-        help="specify docker image"
+        help="specify a docker image"
     )
     parser.add_argument(
         "--name",
         default=None,
         help="specify docker container name"
+    )
+    parser.add_argument(
+        "--sconf",
+        default=None,
+        help="specify a slurm configuration to be used"
+    )
+    parser.add_argument(
+        "--dconf",
+        default=None,
+        help="specify a docker configuration to be used"
     )
     parser.add_argument(
         "-m",
@@ -129,7 +139,13 @@ def print_conf(mode: str, machine: Machine, image: str | None = None):
         output += f' with image: [{image}]'
     logger.info(output)
 
-def handler(project: Project, machine: Machine, parsed: Namespace):
+def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict):
+    """
+    Args:
+    - project (Project): stores project-specific configurations
+    - machine (Machine): stores machine-specific configurations
+    - preset (dict)    : stores preset configurations for slurm or docker images
+    """
     logger.debug(f'handling command for {__file__}')
     logger.debug(f'parsed: {parsed}')
 
@@ -151,6 +167,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
                                 sweep=parsed.sweep,
                                 num_sequence=parsed.num_sequence,
                                 no_sync=parsed.no_sync,
+                                sconf=parsed.sconf,
+                                dconf=parsed.dconf,
                                 force=parsed.force)
 
     # Sync code first
@@ -226,9 +244,16 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
         docker_runner = DockerRunner(client, docker_rmxdirs)
 
         # Docker specific configurations
-        image = parsed.image or machine.parsed_conf.get('docker', {}).get('image')
-        user_id = machine.parsed_conf.get('docker', {}).get('user_id', 0)
-        group_id = machine.parsed_conf.get('docker', {}).get('group_id', 0)
+        docker_pconf = machine.parsed_conf.get('docker', {})
+        image = parsed.image or docker_pconf.get('image')
+        user_id = docker_pconf.get('user_id', 0)
+        group_id = docker_pconf.get('group_id', 0)
+
+        if 'mount_from_host' in docker_pconf:
+            logger.warn('''
+            `mount_from_host` configuration under `docker` in a config file will be ignored.\n
+            Please place it under `project`.
+            ''')
 
 
         if not isinstance(user_id, int):
@@ -296,10 +321,21 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
         if 'slurm' not in machine.parsed_conf:
             raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
 
+        # NOTE: slurm seems to be fine with duplicated name.
         proj_name_maxlen = 15
         rand_num = random.randint(0, 100)
         job_name = f'rmx-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
-        slurm_conf = SlurmConfig(job_name, **machine.parsed_conf['slurm'])
+
+        # Parse from slurm config options (aside from default)
+        if parsed.sconf is not None:
+            logger.debug('parsed.sconf is specified. Loading custom preset conf.')
+            sconf = preset.get('slurm-configs', {}).get(parsed.sconf, {})
+            if sconf is None:
+                raise KeyError(f'configuration: {parsed.sconf} cannot be found in "slurm-configs".')
+
+        else:
+            sconf = machine.parsed_conf['slurm']
+        slurm_conf = SlurmConfig(job_name, **sconf)
 
         # logger.info(f'slurm_conf: {machine.sconf}')
         ssh_client = SimpleSSHClient(machine.remote_conf)
@@ -396,7 +432,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace):
                 # Oftentimes, a user specifies $RMX_RUN_SWEEP_IDX as an argument to the command, and that will be evaluated right before singularity launches
                 env.update({'RMX_RUN_SWEEP_IDX': sweep_idx})
 
-                _slurm_conf.job_name = f'{slurm_conf.job_name}-{sweep_idx}'
+                _name = f'{slurm_conf.job_name}-{sweep_idx}'
+                logger.info(f'Launching sweep {sweep_idx}: {_name}')
+                _slurm_conf.job_name = _name
                 slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=_slurm_conf,
                                   startup=startup,
                                   interactive=False, num_sequence=run_opt.num_sequence,

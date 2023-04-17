@@ -281,21 +281,21 @@ class SlurmRunner:
             # Create a temp bash file and put it on the remote server.
             workdir = self.rmxdirs.codedir / relative_workdir
             exec_file = f"#!/usr/bin/env {s.shell}\n{cmd}"
-            logger.info(f'exec file: {exec_file}')
+            logger.debug(f'exec file: {exec_file}')
             from io import StringIO
             # file_obj = StringIO(f"#!/usr/bin/env {s.shell}\n{cmd}\n{s.shell}")
             file_obj = StringIO(exec_file)
             self.client.put(file_obj, workdir / '.srun-script.sh')
             cmd = slurm_command.srun('.srun-script.sh', pty=s.shell)
 
-            logger.info(f'srun mode:\n{cmd}')
-            logger.info(f'cd to {workdir}')
+            logger.debug(f'srun mode:\n{cmd}')
+            logger.debug(f'cd to {workdir}')
             return self.client.run(cmd, directory=workdir,
                                    disown=False, env=allenv, pty=True, dry_run=dry_run)
         else:
             cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {s.shell}')
-            logger.info(f'sbatch mode:\n{cmd}')
-            logger.info(f'cd to {self.rmxdirs.codedir / relative_workdir}')
+            logger.debug(f'sbatch mode:\n{cmd}')
+            logger.debug(f'cd to {self.rmxdirs.codedir / relative_workdir}')
 
             cmd = '\n'.join([cmd] * num_sequence)
             result = self.client.run(cmd, directory=(self.rmxdirs.codedir / relative_workdir),

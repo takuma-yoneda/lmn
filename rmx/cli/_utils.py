@@ -28,7 +28,8 @@ def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, trans
 
     exclude_str = ' '.join(f'--exclude \'{ex}\'' for ex in exclude)
 
-    cmd = f"rsync --info=progress2 --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
+    # cmd = f"rsync --info=progress2 --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
+    cmd = f"rsync --progress --stats --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
     logger.debug(f'running command: {cmd}')
 
     if not dry_run:

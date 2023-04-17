@@ -75,7 +75,7 @@ def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
         logger.warning('project.outdir is set to None. Doing nothing here.')
 
 
-def handler(project: Project, machine: Machine, parsed: Namespace):
+def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict):
     """Deploy the local repository and execute the command on a machine.
 
     1. get SSH connection to machine

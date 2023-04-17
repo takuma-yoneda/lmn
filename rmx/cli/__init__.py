@@ -7,8 +7,8 @@ import argparse
 
 
 def global_parser():
-    from . import run, sync
-    commands = [run, sync]
+    from . import run, sync, nv
+    commands = [run, sync, nv]
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -60,8 +60,8 @@ def core(args):
 
     # Load config and fuse it with parsed arguments
     from ._config_loader import load_config
-    project, remote_conf = load_config(parsed.machine)
-    parsed.handler(project, remote_conf, parsed)
+    project, remote_conf, preset_conf = load_config(parsed.machine)
+    parsed.handler(project, remote_conf, parsed, preset_conf)
 
 
 def main(args: list[str] | None = None) -> None:
