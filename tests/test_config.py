@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import unittest
-from lmn.helpers import parse_config, merge_nested_dict, remove_recursively
+from lmn.helpers import parse_config, merge_nested_dict
 
 class TestMergeDicts(unittest.TestCase):
     def test_flat_dict(self):
@@ -59,20 +59,6 @@ class TestMergeDicts(unittest.TestCase):
         merged = merge_nested_dict(a, b)
         self.assertDictEqual(gold, merged)
 
-
-class TestRemoveRecursively(unittest.TestCase):
-    def test_remove_recursively(self):
-        a = {
-            '__help': 'hoge',
-            'key1': 'val1',
-            'key2': {'__help': 'fuga', 'key2-1': 'val2-1'}
-        }
-        gold = {
-            'key1': 'val1',
-            'key2': {'key2-1': 'val2-1'}
-        }
-        cleaned = remove_recursively(a, key='__help')
-        self.assertDictEqual(cleaned, gold)
 
 if __name__ == '__main__':
     unittest.main()
