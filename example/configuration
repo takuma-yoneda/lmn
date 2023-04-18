@@ -1,4 +1,4 @@
-// You have to save this as either "~/.config/lmn" or "<project-directory>/.lmn.config".
+// You have to save this as either "~/.config/lmn" or "<project-directory>/.lmn.json5".
 {
     "machines": {
         // machine descriptions go here

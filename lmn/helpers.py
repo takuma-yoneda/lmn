@@ -44,18 +44,18 @@ def merge_nested_dict(a, b, path=None, conflict='use_b'):
     return a
 
 
-def parse_config(project_root, global_conf_paths=['${HOME}/.lmn.json5', '${HOME}/.config/lmn.json5']):
-    """ Parse lmn config (json file)
+def parse_config(project_root):
+    """Parse lmn config (json file).
 
     It looks for config file in this order:
-    1. {project_root}/.lmn.config
-    2. $HOME/.lmn.config
-    3. $HOME/.config/lmn
+    1. {project_root}/.lmn.json5
+    3. $HOME/.config/lmn.json5
     """
     import pyjson5 as json
 
     from os.path import expandvars, isfile
     from lmn import logger
+    from lmn.const import global_config_paths, local_config_fnames
 
     def _maybe_load(path):
         if isfile(path):
@@ -63,12 +63,9 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.lmn.json5', '${HOME}
                 return json.load(f)
         return {}
 
-    # Backward compatibility
-    global_conf_paths += ['${HOME}/.rmx.config', '${HOME}/.config/rmx']
-
     # TODO: Hmmm... a better way to write this config search algorithm?
     path_found = False
-    for path in global_conf_paths:
+    for path in global_config_paths:
         path = expandvars(path)
         if isfile(path):
             path_found = True
@@ -78,14 +75,16 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.lmn.json5', '${HOME}
         with open(path, 'r') as f:
             global_conf = json.load(f)
     else:
-        logger.warning('lmn global config file cannot be located.')
+        logger.error('lmn global config file cannot be located. Please place the config file at ~/.config/lmn.json5')
         global_conf = {}
+        exit(1)
 
-    local_conf = _maybe_load(f'{project_root}/.lmn.json5')
+    # Loop over possible local config file names
+    for local_conf_fname in local_config_fnames:
+        local_conf = _maybe_load(f'{project_root}/{local_conf_fname}')
 
-    # Backward compatibility
-    if not local_conf:
-        local_conf = _maybe_load(f'{project_root}/.rmx.config')
+        if local_conf:
+            break
 
     merged_conf = merge_nested_dict(global_conf, local_conf)
     return merged_conf
@@ -94,15 +93,17 @@ def parse_config(project_root, global_conf_paths=['${HOME}/.lmn.json5', '${HOME}
 def find_project_root():
     """Find a project root (which is rsync-ed with the remote server).
 
-    It first goes up in the directory tree to find ".git" or ".lmn.config" file.
+    It first goes up in the directory tree to find ".git" or ".lmn.json5" file.
     If not found, print warning and just use the current directory
     """
     from lmn import logger
+    from lmn.const import local_config_fnames
     def is_proj_root(directory: Path):
         if (directory / '.git').is_dir():
             return True
-        if (directory / '.lmn.config').is_file():
-            return True
+        for local_conf_fname in local_config_fnames:
+            if (directory / local_conf_fname).is_file():
+                return True
         return False
 
     current_dir = Path(os.getcwd()).resolve()
@@ -113,11 +114,17 @@ def find_project_root():
         if is_proj_root(directory):
             return directory
 
-    logger.warning('.git directory or .lmn file not found in the ancestor directories.\n'
-                'Setting project root to current directory')
+    logger.warning('.git directory or .lmn.json5 file not found in the ancestor directories.\n'
+                   'Setting project root to current directory')
 
-    assert not is_system_root(current_dir), "project root detected is the system root '/' you never want to rsync your entire disk."
-    assert not is_home_dir(current_dir), "project root detected is home directory. You never want to rsync the entire home directory to a remote machine."
+    if is_system_root(current_dir):
+        logger.error("project root detected is the system root '/' you never want to rsync your entire disk.")
+        exit(1)
+
+    if is_home_dir(current_dir):
+        logger.error("project root detected is home directory. You never want to rsync the entire home directory to a remote machine.")
+        exit(1)
+
     return current_dir
 
 

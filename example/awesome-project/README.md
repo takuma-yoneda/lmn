@@ -1,6 +1,6 @@
 # Example Project
 ## Local config file
-`.lmn.config` file in this directory looks like this:
+`.lmn.json5` file in this directory looks like this:
 
 ``` json
 {

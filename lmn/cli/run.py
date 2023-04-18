@@ -192,6 +192,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         _sync_code(project, machine, runtime_options.dry_run)
 
     env = {**project.env, **machine.env}
+    env_from_host = []
     lmndirs = machine.get_lmndirs(project.name)
 
     startup = ' && '.join([e for e in [project.startup, machine.startup] if e.strip()])
@@ -401,12 +402,15 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 # OSError: [Errno 30] Read-only file system
                 options += ['--writable-tmpfs']
 
-            # TEMP: Only for tticslurm
-            assert 'CUDA_VISIBLE_DEVICES' not in env, 'CUDA_VISIBLE_DEVICES will be automatically set. You should not specify it manually.'
-            env['CUDA_VISIBLE_DEVICES'] = '$CUDA_VISIBLE_DEVICES'  # This let Singularity container use the envvar on the host
-
             # Environment variables
+            # TODO: Better to use --env-file option and read from a file
+            # Escaping quotes and commas will be much easier in that way.
             options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
+
+            # NOTE: Since CUDA_VISIBLE_DEVICES is often comma-separated values (i.e., CUDA_VISIBLE_DEVICES=0,1),
+            # and `singularity run --env FOO=BAR,HOGE=PIYO` considers comma to be a separator for envvars,
+            # It fails without special handling.
+            env_from_host = ['CUDA_VISIBLE_DEVICES']
 
             # Workdir
             _workdir = sing_lmndirs.codedir / runtime_options.rel_workdir
@@ -446,11 +450,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=_slurm_conf,
                                   startup=startup,
                                   interactive=False, num_sequence=run_opt.num_sequence,
-                                  env=env, dry_run=run_opt.dry_run)
+                                  env=env, env_from_host=env_from_host, dry_run=run_opt.dry_run)
         else:
             slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=slurm_conf,
                               startup=startup, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
-                              env=env, dry_run=run_opt.dry_run)
+                              env=env, env_from_host=env_from_host, dry_run=run_opt.dry_run)
     else:
         raise ValueError(f'Unrecognized mode: {mode}')
 

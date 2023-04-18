@@ -1,6 +1,7 @@
 from __future__ import annotations
 from argparse import Namespace
-from typing import Iterable
+from typing import Iterable, List, Optional
+from io import StringIO
 import threading
 from lmn import logger
 from docker import DockerClient
@@ -245,11 +246,15 @@ class SlurmRunner:
         self.client = client
         self.lmndirs = lmndirs
 
-    def exec(self, cmd: str, relative_workdir, slurm_conf, env: dict | None = None,
+    def exec(self, cmd: str, relative_workdir, slurm_conf, env: Optional[dict] = None,
+             env_from_host: List[str] = [],
              startup: str = "", num_sequence: int = 1,
              interactive: bool = None, dry_run: bool = False):
         from simple_slurm_command import SlurmCommand
         env = {} if env is None else env
+
+        # TODO: Verify env_from_list contains valid environment variable names
+        # (i.e., cannot have spaces or quotes!!)
 
         if isinstance(cmd, list):
             cmd = ' '.join(cmd)
@@ -284,14 +289,16 @@ class SlurmRunner:
         if startup:
             cmd = f'{startup} && {cmd}'
 
+        workdir = self.lmndirs.codedir / relative_workdir
         if interactive:
             # cmd = f'{shell} -i -c \'{cmd}\''
             # Create a temp bash file and put it on the remote server.
-            workdir = self.lmndirs.codedir / relative_workdir
-            exec_file = f"#!/usr/bin/env {s.shell}\n{cmd}"
+            exec_file = '\n'.join((
+                f'#!/usr/bin/env {s.shell}',
+                *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
+                cmd
+            ))
             logger.debug(f'exec file: {exec_file}')
-            from io import StringIO
-            # file_obj = StringIO(f"#!/usr/bin/env {s.shell}\n{cmd}\n{s.shell}")
             file_obj = StringIO(exec_file)
             self.client.put(file_obj, workdir / '.srun-script.sh')
             cmd = slurm_command.srun('.srun-script.sh', pty=s.shell)
@@ -301,12 +308,29 @@ class SlurmRunner:
             return self.client.run(cmd, directory=workdir,
                                    disown=False, env=allenv, pty=True, dry_run=dry_run)
         else:
-            cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {s.shell}')
-            logger.debug(f'sbatch mode:\n{cmd}')
+            sbatch_cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {s.shell}')
+
+            # HACK: rather than submitting with `sbatch << EOF\n ...\n EOF`,
+            # I use `sbatch file-name` to avoid `$ENVVAR` to be evaluated right at the submission time
+            # I want the `$ENVVAR` to be evaluated after the compute is allocated.
+            sbatch_lines = sbatch_cmd.split('\n')[1:-1]  # Strip `sbatch << EOF` and `EOF`
+
+            if env_from_host:
+                # HACK: Inject `export` for exposing envvars to singularity container,
+                # right after the last line that starts with `#SBATCH`.
+                exports = [f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host]
+                sbatch_lines = sbatch_lines[:-1] + exports + sbatch_lines[-1:]
+            exec_file = '\n'.join(sbatch_lines)
+
+            file_obj = StringIO(exec_file)
+            self.client.put(file_obj, workdir / '.sbatch-script.sh')
+
+            logger.debug(f'sbatch mode\n===============\n{exec_file}\n===============')
             logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
 
+            cmd = 'sbatch .sbatch-script.sh'
             cmd = '\n'.join([cmd] * num_sequence)
-            result = self.client.run(cmd, directory=(self.lmndirs.codedir / relative_workdir),
+            result = self.client.run(cmd, directory=workdir,
                                      disown=False, env=allenv, dry_run=dry_run)
             if result.stderr:
                 logger.warning('sbatch job submission failed:', result.stderr)
