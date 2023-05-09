@@ -322,6 +322,8 @@ class SlurmRunner:
                 sbatch_lines = sbatch_lines[:-1] + exports + sbatch_lines[-1:]
             exec_file = '\n'.join(sbatch_lines)
 
+            # TODO: If you're running a sweep, the content of the file should stay the same.
+            # thus there shouldn't be a need to run these every time.
             file_obj = StringIO(exec_file)
             self.client.put(file_obj, workdir / '.sbatch-script.sh')
 
