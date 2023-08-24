@@ -1,6 +1,6 @@
 [project]
 name = "lmn"
-version = "0.2.6rc0"
+version = "0.2.7"
 description = "LMN: LaMbda functions across servers for Noobs"
 authors = [
     {name = "Takuma Yoneda", email = "takuma-yoneda@users.noreply.github.com"},
@@ -16,6 +16,7 @@ dependencies = [
     "pyjson5",
     "python-dotenv",
     "python-on-whales>=0.53.0",
+    "rsyncy>=0.1.0",
 ]
 requires-python = ">=3.8"
 readme = "README.md"
