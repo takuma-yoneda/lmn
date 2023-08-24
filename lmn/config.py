@@ -6,7 +6,7 @@ import docker
 from lmn import logger
 
 class DockerContainerConfig:
-    def __init__(self, image, name, env: dict | None = None, remove=True, network='host', ipc_mode='host', mounts=None,
+    def __init__(self, image, name, env: dict | None = None, remove=True, network='bridge', ipc_mode='private', mounts=None,
                  startup: str | None = None, tty=True, use_gpus=True, user_id: int = 0, group_id: int = 0, runtime='docker') -> None:
         """
         user_id (int | str): The format is either 2003 for user_id or 2003:4000 to specify user id and group id.
