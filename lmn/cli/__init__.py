@@ -25,9 +25,17 @@ def global_parser():
         default=False
     )
 
+    # It's a bit annoying that I need to have `--verbose` specified in every subcommand as well...
+    # Otherwise the parser complains
+    parser.add_argument(
+        "--verbose",
+        default=False,
+        action="store_true",
+        help="Be verbose"
+    )
+
     # Register subparsers
     subparsers = parser.add_subparsers()
-    name2subparser = {}
     for cmd in commands:
         subp = subparsers.add_parser(
             cmd.name,
@@ -41,7 +49,6 @@ def global_parser():
         # NOTE: I don't particularly like this, but I follow how PDM handles (sub)commands.
         # This registers cmd.handler function as args.handler and it will be called later.
         subp.set_defaults(handler=cmd.handler)
-        name2subparser[cmd.name] = subp
     return parser
 
 
@@ -57,6 +64,11 @@ def core(args):
     logger.setLevel(INFO)
     if parsed.verbose:
         logger.setLevel(DEBUG)
+
+    if not hasattr(parsed, 'remote_command'):
+        # For the case that only `lmn` is given as a command
+        parser.print_help()
+        sys.exit(0)
 
     # Load config and fuse it with parsed arguments
     from ._config_loader import load_config
