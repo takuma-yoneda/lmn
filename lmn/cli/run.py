@@ -237,15 +237,15 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
         if not runtime_options.no_sync:
             mounts = [Mount(target=docker_lmndirs.codedir, source=lmndirs.codedir, type='bind'),
-                    Mount(target=docker_lmndirs.outdir, source=lmndirs.outdir, type='bind'),
-                    Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind')]
+                      Mount(target=docker_lmndirs.outdir, source=lmndirs.outdir, type='bind'),
+                      Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind')]
         else:
             mounts = []
         mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
 
         docker_runner = DockerRunner(client, docker_lmndirs)
 
-        # Docker specific configurations
+        # Docker-specific configurations
         docker_pconf = machine.parsed_conf.get('docker', {})
         image = parsed.image or docker_pconf.get('image')
         user_id = docker_pconf.get('user_id', 0)
@@ -257,20 +257,28 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
         container_startup = docker_pconf.get('startup', '')
 
+        if 'mount_from_host' in docker_pconf:
+            logger.error("`mount_from_host` cannot be under `docker` in the config files.")
+            logger.error("Please place it under `project`.")
+            import sys; sys.exit(1)
 
         if not isinstance(user_id, int):
-            raise ValueError('user_id must be an integer')
+            logger.error("Invalid config: user_id must be an integer")
+            import sys; sys.exit(1)
 
         if not isinstance(group_id, int):
-            raise ValueError('group_id must be an integer')
-
+            logger.error("Invalid config: group_id must be an integer")
+            import sys; sys.exit(1)
 
         if image is None:
-            raise KeyError('docker image is not specified.')
+            logger.error("Invalid config: docker image is not specified.")
+            import sys; sys.exit(1)
 
         print_conf(mode, machine, image)
         if runtime_options.sweep:
-            assert runtime_options.disown, "You must set -d option to use sweep functionality."
+            if not runtime_options.disown:
+                logger.error("You must set -d option to use sweep functionality.")
+                import sys; sys.exit(1)
             sweep_ind = parse_sweep_idx(runtime_options.sweep)
 
             single_sweep = (len(sweep_ind) == 1)
@@ -440,7 +448,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
         print_conf(mode, machine, image=image if mode in ['slurm-sing', 'sing-slurm'] else None)
         if run_opt.sweep:
-            assert run_opt.disown, "You must set -d option to use sweep functionality."
+            if not run_opt.disown:
+                logger.error("You must set -d option to use sweep functionality.")
+                import sys; sys.exit(1)
             sweep_ind = parse_sweep_idx(run_opt.sweep)
 
             _slurm_conf = deepcopy(slurm_conf)

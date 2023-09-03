@@ -9,6 +9,7 @@ from lmn.config import DockerContainerConfig
 from lmn.machine import SimpleSSHClient
 from lmn.helpers import replace_lmn_envvars
 
+
 def get_lmnenvs(cmd: str, lmndirs: Namespace):
     envvars = {
         "LMN_CODE_DIR": lmndirs.codedir,
@@ -117,7 +118,7 @@ class DockerRunner:
             try:
                 whale_client.run(
                     d.image,
-                    ['/bin/bash', '-c', cmd],  # <-- TODO: THis needs to be a list of strings!!
+                    ['/bin/bash', '-c', cmd],
                     detach=False,
                     envs=allenv,
                     gpus='all',
@@ -158,12 +159,11 @@ class DockerRunner:
             logger.debug(f'container: {container}')
 
             def log_stream(stream: Iterable):
-                """print out log stream"""
+                """Print out log stream."""
                 for char in stream:
                     # logger.info(char.decode('utf-8'))
                     # 'ignore' ignores decode error that happens when multi-byte char is passed.
                     print(char.decode('utf-8', 'ignore'), end='')
-
 
             if not quiet:
                 if log_stderr_background:
