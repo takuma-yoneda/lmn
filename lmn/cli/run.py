@@ -255,7 +255,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             logger.warn('`startup` configurations outside of `docker` will be ignored in docker mode.')
             logger.warn('Please place `startup` under `docker` if you want to run it in the container.')
 
-        startup = docker_pconf.get('startup', '')  # NOTE: Overwrite the startup command for machine / project !
+        container_startup = docker_pconf.get('startup', '')
 
 
         if not isinstance(user_id, int):
@@ -283,7 +283,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                     image=image,
                     name=_name,
                     mounts=mounts,
-                    startup=startup,
+                    startup=container_startup,
                     env=env,
                     user_id=user_id,
                     group_id=group_id
@@ -365,6 +365,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             image = machine.parsed_conf.get('singularity', {}).get('sif_file')
             overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
             writable_tmpfs = machine.parsed_conf.get('singularity', {}).get('writable_tmpfs', False)
+            container_startup = machine.parsed_conf.get('singularity', {}).get('startup', '')
 
             # Overwrite lmn envvars.  Hmm I don't like this...
             from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
@@ -426,6 +427,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
             # Overwrite command
             options = ' '.join(options)
+
+            if container_startup:
+                run_opt.cmd = f'{container_startup} && {run_opt.cmd}'
 
             # Trying my best to escape quotations (https://stackoverflow.com/a/18886646/19913466)
             logger.debug(f'run_opt.cmd before escape: {run_opt.cmd}')
