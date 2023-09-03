@@ -52,9 +52,16 @@ class DockerRunner:
         self.client = client
         self.lmndirs = lmndirs
 
-    def exec(self, cmd: str, relative_workdir, docker_conf: DockerContainerConfig,
+    def exec(self, cmd: str, relative_workdir, docker_conf: DockerContainerConfig, startup: str = "",
              kill_existing_container: bool = True, interactive: bool = True, quiet: bool = False,
              log_stderr_background: bool = False, use_cli: bool = True) -> None:
+
+        if startup:
+            raise NotImplementedError(
+                "Currently startup command before launching the container is not supported.\n"
+                "For now, you can only specify `startup` command that runs in the container."
+            )
+
         if log_stderr_background:
             assert not interactive, 'log_stderr_background=True cannot be used with interactive=True'
 
@@ -66,7 +73,6 @@ class DockerRunner:
         logger.debug(f'mounts: {docker_conf.mounts}')
         logger.debug(f'docker_conf: {docker_conf}')
 
-
         logger.debug(f'container codedir: {str(self.lmndirs.codedir / relative_workdir)}')
 
         if kill_existing_container:
@@ -76,7 +82,7 @@ class DockerRunner:
                 container = self.client.containers.get(docker_conf.name)
             except NotFound:
                 container = None
-            
+
             if container:
                 logger.warning(f'Removing the existing container: {docker_conf.name}')
                 container.remove(force=True)

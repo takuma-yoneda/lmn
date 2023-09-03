@@ -251,11 +251,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         user_id = docker_pconf.get('user_id', 0)
         group_id = docker_pconf.get('group_id', 0)
 
-        if 'mount_from_host' in docker_pconf:
-            logger.warn('''
-            `mount_from_host` configuration under `docker` in a config file will be ignored.\n
-            Please place it under `project`.
-            ''')
+        if startup:
+            logger.warn('`startup` configurations outside of `docker` will be ignored in docker mode.')
+            logger.warn('Please place `startup` under `docker` if you want to run it in the container.')
+
+        startup = docker_pconf.get('startup', '')  # NOTE: Overwrite the startup command for machine / project !
 
 
         if not isinstance(user_id, int):
@@ -291,6 +291,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 docker_runner.exec(runtime_options.cmd,
                                    runtime_options.rel_workdir,
                                    docker_conf,
+                                   # startup=startup,
                                    interactive=False,
                                    kill_existing_container=runtime_options.force,
                                    quiet=not single_sweep)
@@ -311,6 +312,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             docker_runner.exec(runtime_options.cmd,
                                runtime_options.rel_workdir,
                                docker_conf,
+                               # startup=startup,
                                interactive=not runtime_options.disown,
                                kill_existing_container=runtime_options.force)
 

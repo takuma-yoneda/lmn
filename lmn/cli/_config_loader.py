@@ -56,7 +56,7 @@ class Machine:
         self.remote_conf = remote_conf
         self.lmndir = Path(lmndir)
         self.env = env if env is not None else {}
-        self.startup = startup
+        self.startup = startup or parsed_conf.get('startup', '')
         self.parsed_conf = parsed_conf
 
         # aliases
