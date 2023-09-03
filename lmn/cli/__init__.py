@@ -65,7 +65,7 @@ def core(args):
     if parsed.verbose:
         logger.setLevel(DEBUG)
 
-    if not hasattr(parsed, 'remote_command'):
+    if len(args) == 0:
         # For the case that only `lmn` is given as a command
         parser.print_help()
         sys.exit(0)

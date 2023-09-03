@@ -70,12 +70,12 @@ def _get_parser() -> ArgumentParser:
         action="store_true",
         help="When a job with the same name already exists, kill it and run the new one (only for Docker mode)",
     )
-    parser.add_argument(
-        "-X",
-        "--x-forward",
-        action="store_true",
-        help="X11 forwarding",
-    )
+    # parser.add_argument(
+    #     "-X",
+    #     "--x-forward",
+    #     action="store_true",
+    #     help="X11 forwarding",
+    # )
     parser.add_argument(
         "--no-sync",
         action="store_true",
@@ -138,6 +138,7 @@ def print_conf(mode: str, machine: Machine, image: str | None = None):
     if image is not None:
         output += f' with image: [{image}]'
     logger.info(output)
+
 
 def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict):
     """
@@ -338,6 +339,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             sconf = machine.parsed_conf['slurm']
         slurm_conf = SlurmConfig(job_name, **sconf)
 
+        if runtime_options.force:
+            logger.warn("`-f / --force` option has no effect in slurm mode")
+
         # logger.info(f'slurm_conf: {machine.sconf}')
         ssh_client = SimpleSSHClient(machine.remote_conf)
         slurm_runner = SlurmRunner(ssh_client, lmndirs)
@@ -366,13 +370,15 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
             # TODO: Do we need this??
             env.update({
-                'LMN_CODE_DIR': sing_lmndirs.codedir, 
+                'LMN_PROJECT_NAME': project.name,
+                'LMN_CODE_DIR': sing_lmndirs.codedir,
                 'LMN_MOUNT_DIR': sing_lmndirs.mountdir,
                 'LMN_OUTPUT_DIR': sing_lmndirs.outdir
             })
 
             # Backward compat
             env.update({
+                'RMX_PROJECT_NAME': project.name,
                 'RMX_CODE_DIR': sing_lmndirs.codedir,
                 'RMX_MOUNT_DIR': sing_lmndirs.mountdir,
                 'RMX_OUTPUT_DIR': sing_lmndirs.outdir
@@ -410,7 +416,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             # NOTE: Since CUDA_VISIBLE_DEVICES is often comma-separated values (i.e., CUDA_VISIBLE_DEVICES=0,1),
             # and `singularity run --env FOO=BAR,HOGE=PIYO` considers comma to be a separator for envvars,
             # It fails without special handling.
-            env_from_host = ['CUDA_VISIBLE_DEVICES']
+            env_from_host = ['CUDA_VISIBLE_DEVICES', 'SLURM_JOBID', 'SLURM_JOB_ID', 'SLURM_TASK_PID']
 
             # Workdir
             _workdir = sing_lmndirs.codedir / runtime_options.rel_workdir
@@ -438,7 +444,10 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 # Example: (https://docs.sylabs.io/guides/3.1/user-guide/environment_and_metadata.html?highlight=environment%20variable)
                 #     $ SINGULARITYENV_HELLO=world singularity exec centos7.img env | grep HELLO
                 #     HELLO=world
-                env.update({'SINGULARITYENV_LMN_RUN_SWEEP_IDX': sweep_idx})
+                env.update({
+                    'SINGULARITYENV_LMN_RUN_SWEEP_IDX': sweep_idx,
+                    'APPTAINERENV_LMN_RUN_SWEEP_IDX': sweep_idx,
+                })
 
                 # Oftentimes, a user specifies $LMN_RUN_SWEEP_IDX as an argument to the command,
                 # and that will be evaluated right before singularity launches

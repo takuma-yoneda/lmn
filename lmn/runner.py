@@ -296,6 +296,7 @@ class SlurmRunner:
             exec_file = '\n'.join((
                 f'#!/usr/bin/env {s.shell}',
                 *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
+                *[f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host],
                 cmd
             ))
             logger.debug(f'exec file: {exec_file}')
@@ -319,6 +320,7 @@ class SlurmRunner:
                 # HACK: Inject `export` for exposing envvars to singularity container,
                 # right after the last line that starts with `#SBATCH`.
                 exports = [f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host]
+                exports += [f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host]
                 sbatch_lines = sbatch_lines[:-1] + exports + sbatch_lines[-1:]
             exec_file = '\n'.join(sbatch_lines)
 
