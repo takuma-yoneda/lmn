@@ -103,95 +103,34 @@ class DockerRunner:
         if interactive:
             assert d.tty
 
-            if use_cli:
-                # Use python-on-whales (i.e., docker cli)
-                import python_on_whales
-                whale_client = python_on_whales.DockerClient(host=f'ssh://{self.client.api._custom_adapter.ssh_host}')
-                logger.debug(f'docker run with command: {cmd}')
+            # Use python-on-whales (i.e., docker cli)
+            import python_on_whales
+            whale_client = python_on_whales.DockerClient(host=f'ssh://{self.client.api._custom_adapter.ssh_host}')
+            logger.debug(f'docker run with command: {cmd}')
 
-                # NOTE: dockerpy is stupid enough that it cannot attach remote pty.
-                # dockerpty is good but fails when the terminal size changes frantically.
-                # Let's wait for docker team to properly merge dockerpty.
-                # Or I should probably think about migrating to https://github.com/gabrieldemarmiesse/python-on-whales
-                # ^ This one just calls docker cli via Python, rather than using the complicated Docker SDK.
-                # options = [
-                #     '-it',
-                #     '--gpus', 'all',
-                #     '--workdir', str(self.lmndirs.codedir / relative_workdir),
-                #     '--user', d.user_id,
-                #     '--name', d.name,
-                # ]
-                # if d.network:
-                #     options += ['--net', d.network]
-                # if d.ipc_mode:
-                #     options += ['--ipc', d.ipc_mode]
-                # if allenv:
-                #     options += [item for name, val in allenv.items() for item in ('-e', f"{name}='{val}'")]
-                # if d.mounts:
-                #     options += [item for m in d.mounts for item in ('-v', f'{m["Source"]}:{m["Target"]}')]
-
-                # docker_cmd = [
-                #     'docker',
-                #     '-H', f'ssh://{self.client.api._custom_adapter.ssh_host}',
-                #     'run',
-                #     *options,
-                #     d.image,
-                #     cmd
-                # ]
-                # docker_cmd = [str(item) for item in docker_cmd]
-                # logger.debug(f'running docker cli: {docker_cmd}')
-
-                # import subprocess
-                # subprocess.check_call(' '.join(docker_cmd), shell=True)
-
-                try:
-                    whale_client.run(
-                        d.image,
-                        ['/bin/bash', '-c', cmd],  # <-- TODO: THis needs to be a list of strings!!
-                        detach=False,
-                        envs=allenv,
-                        gpus='all',
-                        interactive=True,
-                        ipc=d.ipc_mode,
-                        mounts=[('type=bind', f'source={m["Source"]}', f'destination={m["Target"]}') for m in d.mounts],
-                        name=d.name,
-                        networks=[d.network],
-                        remove=True,
-                        tty=True,
-                        user=f'{d.user_id}:{d.group_id}',
-                        workdir=str(self.lmndirs.codedir / relative_workdir),
-                    )
-                except python_on_whales.exceptions.DockerException as e:
-                    # NOTE: hide error as the exception is also raised when the command in the container returns non-zero exit value.
-                    import traceback
-                    import sys
-                    logger.debug(f'python_on_whales failed!!:\n{str(e)}')
-                    logger.debug(traceback.format_exc())
-
-
-            else:
-                # Use dockerpty
-                cmd = f'/bin/bash -c \'{cmd}\''
-                logger.debug(f'docker run with command: {cmd}')
-                logger.debug('interactive is True. Force setting detach=False, tty=True, stdin_open=True.')
-                container = self.client.containers.create(d.image,
-                                                          cmd,
-                                                          name=d.name,
-                                                          network=d.network,
-                                                          ipc_mode=d.ipc_mode,
-                                                          detach=False,
-                                                          tty=True,
-                                                          stdin_open=True,
-                                                          mounts=d.mounts,
-                                                          environment=allenv,
-                                                          device_requests=d.device_requests,
-                                                          working_dir=str(self.lmndirs.codedir / relative_workdir),
-                                                          user=f'{d.user_id}:{d.group_id}',
-                                                          # entrypoint='/bin/bash -c "sleep 10 && xeyes"'  # Use it if you wanna overwrite entrypoint
-                                                    )
-                logger.debug(f'container: {container}')
-                import dockerpty
-                dockerpty.start(self.client.api, container.id)
+            try:
+                whale_client.run(
+                    d.image,
+                    ['/bin/bash', '-c', cmd],  # <-- TODO: THis needs to be a list of strings!!
+                    detach=False,
+                    envs=allenv,
+                    gpus='all',
+                    interactive=True,
+                    ipc=d.ipc_mode,
+                    mounts=[('type=bind', f'source={m["Source"]}', f'destination={m["Target"]}') for m in d.mounts],
+                    name=d.name,
+                    networks=[d.network],
+                    remove=True,
+                    tty=True,
+                    user=f'{d.user_id}:{d.group_id}',
+                    workdir=str(self.lmndirs.codedir / relative_workdir),
+                )
+            except python_on_whales.exceptions.DockerException as e:
+                # NOTE: hide error as the exception is also raised when the command in the container returns non-zero exit value.
+                import traceback
+                import sys
+                logger.debug(f'python_on_whales failed!!:\n{str(e)}')
+                logger.debug(traceback.format_exc())
 
         else:
             cmd = f'/bin/bash -c \'{cmd}\''
@@ -209,7 +148,7 @@ class DockerRunner:
                                                    device_requests=d.device_requests,
                                                    working_dir=str(self.lmndirs.codedir / relative_workdir),
                                                    user=f'{d.user_id}:{d.group_id}',
-                                                )
+                                                   )
             logger.debug(f'container: {container}')
 
             def log_stream(stream: Iterable):
