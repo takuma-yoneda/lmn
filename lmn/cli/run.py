@@ -239,7 +239,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         if not runtime_options.no_sync:
             mounts = [Mount(target=docker_lmndirs.codedir, source=lmndirs.codedir, type='bind'),
                       Mount(target=docker_lmndirs.outdir, source=lmndirs.outdir, type='bind'),
-                      Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind')]
+                      Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind'),
+                      Mount(target=docker_lmndirs.scriptdir, source=lmndirs.scriptdir, type='bind')]
         else:
             mounts = []
         mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
@@ -313,7 +314,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 image=image,
                 name=name,
                 mounts=mounts,
-                startup=startup,
+                startup=container_startup,
                 env=env,
                 user_id=user_id,
                 group_id=group_id,
