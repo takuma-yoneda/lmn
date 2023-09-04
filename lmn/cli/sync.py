@@ -1,9 +1,9 @@
 from argparse import ArgumentParser, Namespace
-from lmn import logger
-from lmn.cli._utils import rsync
-from lmn.cli._config_loader import Project, Machine
-from lmn.machine import SimpleSSHClient
 
+from lmn import logger
+from lmn.cli._config_loader import Machine, Project
+from lmn.cli._utils import rsync
+from lmn.machine import SimpleSSHClient
 
 RSYNC_DESTINATION_PATH = "/tmp/".rstrip('/')
 
@@ -24,27 +24,27 @@ def _get_parser() -> ArgumentParser:
     )
     return parser
 
+
 def _sync_code(project: Project, machine: Machine, dry_run: bool = False):
     # rsync_options = f"--rsync-path='mkdir -p {project.remote_dir} && mkdir -p {project.remote_outdir} && mkdir -p {project.remote_mountdir} && rsync'"
 
     # A trick to create directories right before performing rsync
     lmndirs = machine.get_lmndirs(project.name)
-    rsync_options = f"--rsync-path='mkdir -p {lmndirs.codedir} && mkdir -p {lmndirs.outdir} && mkdir -p {lmndirs.mountdir} && rsync'"
+    rsync_options = f"--rsync-path='mkdir -p {lmndirs.codedir} && mkdir -p {lmndirs.outdir} && mkdir -p {lmndirs.mountdir} && mkdir -p {lmndirs.scriptdir} && rsync'"
 
     try:
         rsync(source_dir=project.rootdir, target_dir=machine.uri(lmndirs.codedir),
-                        exclude=project.exclude, options=rsync_options, dry_run=dry_run, transfer_rootdir=False)
+              exclude=project.exclude, options=rsync_options, dry_run=dry_run, transfer_rootdir=False)
 
         # rsync the directories to mount
         for mount_dir in project.mount_dirs:
             rsync(source_dir=mount_dir, target_dir=machine.uri(lmndirs.mountdir),
-                                exclude=project.exclude, dry_run=dry_run)
+                  exclude=project.exclude, dry_run=dry_run)
     except OSError:
-        import traceback
         import sys
+        import traceback
         print(traceback.format_exc(0), file=sys.stderr)
         sys.exit(1)
-
 
 
 def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
@@ -62,13 +62,13 @@ def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
             logger.info(msg)
             if num_output_files > 0:
                 rsync(source_dir=machine.uri(lmndirs.outdir), target_dir=project.outdir,
-                    dry_run=dry_run)
+                      dry_run=dry_run)
                 logger.info(f'The output files are copied to {str(project.outdir)}')
 
         except OSError:
             # NOTE: Only show the last stack of traceback (If I remember corectly...)
-            import traceback
             import sys
+            import traceback
             print(traceback.format_exc(0), file=sys.stderr)
             sys.exit(1)
     else:
