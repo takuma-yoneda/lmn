@@ -1,4 +1,5 @@
 from __future__ import annotations
+import time
 from copy import deepcopy
 import os
 from pathlib import Path
@@ -450,6 +451,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
             run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=escaped_cmd)
 
+        timestamp = f"{time.time():.5f}".split('.')[-1]  # 5 subdigits of the timestamp
         print_conf(mode, machine, image=image if mode in ['slurm-sing', 'sing-slurm'] else None)
         if run_opt.sweep:
             if not run_opt.disown:
@@ -471,18 +473,19 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
                 # Oftentimes, a user specifies $LMN_RUN_SWEEP_IDX as an argument to the command,
                 # and that will be evaluated right before singularity launches
-                env.update({'LMN_RUN_SWEEP_IDX': sweep_idx})
+                env.update({'LMN_RUN_SWEEP_IDX': sweep_idx, 'RMX_RUN_SWEEP_IDX': sweep_idx})
 
-                _name = f'{slurm_conf.job_name}-{sweep_idx}'
+                _name = f'{slurm_conf.job_name}-{timestamp}-{sweep_idx}'
                 logger.info(f'Launching sweep {sweep_idx}: {_name}')
                 _slurm_conf.job_name = _name
                 slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=_slurm_conf,
                                   startup=startup,
+                                  timestamp=timestamp,
                                   interactive=False, num_sequence=run_opt.num_sequence,
                                   env=env, env_from_host=env_from_host, dry_run=run_opt.dry_run)
         else:
             slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=slurm_conf,
-                              startup=startup, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
+                              startup=startup, timestamp=timestamp, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
                               env=env, env_from_host=env_from_host, dry_run=run_opt.dry_run)
     else:
         raise ValueError(f'Unrecognized mode: {mode}')

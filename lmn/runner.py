@@ -1,14 +1,18 @@
 from __future__ import annotations
-from pathlib import Path
-from argparse import Namespace
-from typing import Iterable, List, Optional
-from io import StringIO
+
 import threading
-from lmn import logger
+import time
+from argparse import Namespace
+from io import StringIO
+from pathlib import Path
+from typing import Iterable, List, Optional
+
 from docker import DockerClient
+
+from lmn import logger
 from lmn.config import DockerContainerConfig
-from lmn.machine import SimpleSSHClient
 from lmn.helpers import replace_lmn_envvars
+from lmn.machine import SimpleSSHClient
 
 
 def get_lmnenvs(cmd: str, lmndirs: Namespace):
@@ -137,7 +141,6 @@ class DockerRunner:
             except python_on_whales.exceptions.DockerException as e:
                 # NOTE: hide error as the exception is also raised when the command in the container returns non-zero exit value.
                 import traceback
-                import sys
                 logger.debug(f'python_on_whales failed!!:\n{str(e)}')
                 logger.debug(traceback.format_exc())
 
@@ -195,7 +198,7 @@ class SlurmRunner:
 
     def exec(self, cmd: str, relative_workdir, slurm_conf, env: Optional[dict] = None,
              env_from_host: List[str] = [],
-             startup: str = "", num_sequence: int = 1,
+             startup: str = "", timestamp: str = "", num_sequence: int = 1,
              interactive: bool = None, dry_run: bool = False):
         from simple_slurm_command import SlurmCommand
         env = {} if env is None else env
@@ -248,8 +251,9 @@ class SlurmRunner:
             ))
             logger.debug(f'exec file: {exec_file}')
             file_obj = StringIO(exec_file)
-            self.client.put(file_obj, Path(self.lmndirs.scriptdir) / '.srun-script.sh')
-            cmd = slurm_command.srun(str(Path(self.lmndirs.scriptdir) / '.srun-script.sh'), pty=s.shell)
+            srun_script_fpath = Path(self.lmndirs.scriptdir) / f'.srun-script-{timestamp}.sh'
+            self.client.put(file_obj, srun_script_fpath)
+            cmd = slurm_command.srun(str(srun_script_fpath), pty=s.shell)
 
             logger.debug(f'srun mode:\n{cmd}')
             logger.debug(f'cd to {workdir}')
@@ -274,12 +278,13 @@ class SlurmRunner:
             # TODO: If you're running a sweep, the content of the file should stay the same.
             # thus there shouldn't be a need to run these every time.
             file_obj = StringIO(exec_file)
-            self.client.put(file_obj, Path(self.lmndirs.scriptdir) / '.sbatch-script.sh')
+            sbatch_script_fpath = Path(self.lmndirs.scriptdir) / f'.sbatch-script-{timestamp}.sh'
+            self.client.put(file_obj, sbatch_script_fpath)
 
             logger.debug(f'sbatch mode\n===============\n{exec_file}\n===============')
             logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
 
-            cmd = f'sbatch {Path(self.lmndirs.scriptdir) / ".sbatch-script.sh"}'
+            cmd = f'sbatch {sbatch_script_fpath}'
             cmd = '\n'.join([cmd] * num_sequence)
             result = self.client.run(cmd, directory=workdir,
                                      disown=False, env=allenv, dry_run=dry_run)
