@@ -379,12 +379,14 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
             sing_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
+            # TODO: Use get_lmndirs function!
             # TODO: Do we need this??
             env.update({
                 'LMN_PROJECT_NAME': project.name,
                 'LMN_CODE_DIR': sing_lmndirs.codedir,
                 'LMN_MOUNT_DIR': sing_lmndirs.mountdir,
-                'LMN_OUTPUT_DIR': sing_lmndirs.outdir
+                'LMN_OUTPUT_DIR': sing_lmndirs.outdir,
+                'LMN_SCRIPT_DIR': sing_lmndirs.scriptdir,
             })
 
             # Backward compat
@@ -392,7 +394,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 'RMX_PROJECT_NAME': project.name,
                 'RMX_CODE_DIR': sing_lmndirs.codedir,
                 'RMX_MOUNT_DIR': sing_lmndirs.mountdir,
-                'RMX_OUTPUT_DIR': sing_lmndirs.outdir
+                'RMX_OUTPUT_DIR': sing_lmndirs.outdir,
+                'RMX_SCRIPT_DIR': sing_lmndirs.scriptdir,
             })
 
             # NOTE: Without --containall, nvidia-smi command fails with "couldn't find libnvidia-ml.so library in your system."
@@ -407,7 +410,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             if not runtime_options.no_sync:
                 options += [bind.format(target=sing_lmndirs.codedir, source=lmndirs.codedir),
                             bind.format(target=sing_lmndirs.outdir, source=lmndirs.outdir),
-                            bind.format(target=sing_lmndirs.mountdir, source=lmndirs.mountdir)]
+                            bind.format(target=sing_lmndirs.mountdir, source=lmndirs.mountdir),
+                            bind.format(target=sing_lmndirs.scriptdir, source=lmndirs.scriptdir)]
             options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
 
             # Overlay

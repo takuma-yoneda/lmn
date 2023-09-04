@@ -73,17 +73,19 @@ class Machine:
         return Namespace(
             codedir=str(rootdir / 'code'),
             mountdir=str(rootdir / 'mount'),
-            outdir=str(rootdir / 'output')
+            outdir=str(rootdir / 'output'),
+            scriptdir=str(rootdir / 'script'),
         )
 
 
 def get_docker_lmndirs(lmndir: Path | str, project_name: str) -> Namespace:
-        rootdir = Path(lmndir) / project_name
-        return Namespace(
-            codedir=str(rootdir / 'code'),
-            mountdir=str(rootdir / 'mount'),
-            outdir=str(rootdir / 'output')
-        )
+    rootdir = Path(lmndir) / project_name
+    return Namespace(
+        codedir=str(rootdir / 'code'),
+        mountdir=str(rootdir / 'mount'),
+        outdir=str(rootdir / 'output'),
+        scriptdir=str(rootdir / 'script'),
+    )
 
 
 def load_config(machine_name: str):

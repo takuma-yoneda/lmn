@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 from argparse import Namespace
 from typing import Iterable, List, Optional
 from io import StringIO
@@ -15,6 +16,7 @@ def get_lmnenvs(cmd: str, lmndirs: Namespace):
         "LMN_CODE_DIR": lmndirs.codedir,
         "LMN_MOUNT_DIR": lmndirs.mountdir,
         "LMN_OUTPUT_DIR": lmndirs.outdir,
+        "LMN_SCRIPT_DIR": lmndirs.scriptdir,
         "LMN_USER_COMMAND": cmd,
     }
 
@@ -234,7 +236,7 @@ class SlurmRunner:
         if startup:
             cmd = f'{startup} && {cmd}'
 
-        workdir = self.lmndirs.codedir / relative_workdir
+        workdir = Path(self.lmndirs.codedir) / relative_workdir
         if interactive:
             # cmd = f'{shell} -i -c \'{cmd}\''
             # Create a temp bash file and put it on the remote server.
@@ -246,8 +248,8 @@ class SlurmRunner:
             ))
             logger.debug(f'exec file: {exec_file}')
             file_obj = StringIO(exec_file)
-            self.client.put(file_obj, workdir / '.srun-script.sh')
-            cmd = slurm_command.srun('.srun-script.sh', pty=s.shell)
+            self.client.put(file_obj, Path(self.lmndirs.scriptdir) / '.srun-script.sh')
+            cmd = slurm_command.srun(str(Path(self.lmndirs.scriptdir) / '.srun-script.sh'), pty=s.shell)
 
             logger.debug(f'srun mode:\n{cmd}')
             logger.debug(f'cd to {workdir}')
@@ -272,12 +274,12 @@ class SlurmRunner:
             # TODO: If you're running a sweep, the content of the file should stay the same.
             # thus there shouldn't be a need to run these every time.
             file_obj = StringIO(exec_file)
-            self.client.put(file_obj, workdir / '.sbatch-script.sh')
+            self.client.put(file_obj, Path(self.lmndirs.scriptdir) / '.sbatch-script.sh')
 
             logger.debug(f'sbatch mode\n===============\n{exec_file}\n===============')
             logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
 
-            cmd = 'sbatch .sbatch-script.sh'
+            cmd = f'sbatch {Path(self.lmndirs.scriptdir) / ".sbatch-script.sh"}'
             cmd = '\n'.join([cmd] * num_sequence)
             result = self.client.run(cmd, directory=workdir,
                                      disown=False, env=allenv, dry_run=dry_run)
