@@ -253,6 +253,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         user_id = docker_pconf.get('user_id', 0)
         group_id = docker_pconf.get('group_id', 0)
 
+        network = docker_pconf.get('network', 'bridge')
+
         if startup:
             logger.warn('`startup` configurations outside of `docker` will be ignored in docker mode.')
             logger.warn('Please place `startup` under `docker` if you want to run it in the container.')
@@ -296,7 +298,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                     startup=container_startup,
                     env=env,
                     user_id=user_id,
-                    group_id=group_id
+                    group_id=group_id,
+                    network=network,
                 )
                 docker_runner.exec(runtime_options.cmd,
                                    runtime_options.rel_workdir,
@@ -318,6 +321,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 env=env,
                 user_id=user_id,
                 group_id=group_id,
+                network=network,
             )
             docker_runner.exec(runtime_options.cmd,
                                runtime_options.rel_workdir,
@@ -458,6 +462,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             if not run_opt.disown:
                 logger.error("You must set -d option to use sweep functionality.")
                 import sys; sys.exit(1)
+
+            if not parsed.contain:
+                logger.error("You should set --contain option to use sweep functionality.")
+                import sys; sys.exit(1)
+
             sweep_ind = parse_sweep_idx(run_opt.sweep)
 
             _slurm_conf = deepcopy(slurm_conf)
