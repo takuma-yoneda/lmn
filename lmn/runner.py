@@ -1,18 +1,19 @@
 from __future__ import annotations
-
 import threading
 import time
-from argparse import Namespace
 from io import StringIO
 from pathlib import Path
-from typing import Iterable, List, Optional
-
+from typing import TYPE_CHECKING, Iterable, List, Optional
 from docker import DockerClient
-
 from lmn import logger
-from lmn.config import DockerContainerConfig
 from lmn.helpers import replace_lmn_envvars
-from lmn.machine import SimpleSSHClient
+
+
+if TYPE_CHECKING:
+    from argparse import Namespace
+    from lmn.machine import SimpleSSHClient
+    from lmn.config import DockerContainerConfig
+    from lmn.scheduler.pbs import PBSConfig
 
 
 def get_lmnenvs(cmd: str, lmndirs: Namespace):
@@ -292,3 +293,91 @@ class SlurmRunner:
                 logger.warning('sbatch job submission failed:', result.stderr)
             jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833
             logger.debug(f'jobid {jobid}')
+
+
+class PBSRunner:
+    def __init__(self, client: SimpleSSHClient, lmndirs: Namespace) -> None:
+        self.client = client
+        self.lmndirs = lmndirs
+
+    def exec(self, cmd: str, relative_workdir, pbs_conf: PBSConfig, env: Optional[dict] = None,
+             env_from_host: List[str] = [],
+             startup: str = "", timestamp: str = "", num_sequence: int = 1,
+             interactive: bool = None, dry_run: bool = False):
+        from lmn.scheduler.pbs import PBSCommand
+        env = {} if env is None else env
+
+        assert num_sequence == 1, 'Jobs with dependency are not supported on PBS mode yet.'
+
+        if isinstance(cmd, list):
+            cmd = ' '.join(cmd)
+
+        # Tasks:
+        # - Prepare list of environment variables
+        # - Decorate the command (to be run inside of a container),
+        #   and pack it into a file (exec_file)
+        # - Create a job submission (scheduler-specific) command
+        # - Execute the command in the remote machine
+
+        lmnenv = get_lmnenvs(cmd, self.lmndirs)
+        allenv = {**env, **lmnenv}
+        allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
+
+        if startup:
+            cmd = f'{startup} && {cmd}'
+
+        workdir = Path(self.lmndirs.codedir) / relative_workdir
+        if interactive:
+            # cmd = f'{shell} -i -c \'{cmd}\''
+            # Create a temp bash file and put it on the remote server.
+            exec_file = '\n'.join((
+                f'#!/usr/bin/env {pbs_conf.shell}',
+                *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
+                *[f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host],
+                cmd  # Command to run inside of a container
+            ))
+            logger.debug(f'exec file: {exec_file}')
+            file_obj = StringIO(exec_file)
+            qsub_script_fpath = Path(self.lmndirs.scriptdir) / f'.qsub-script-{timestamp}.sh'
+            self.client.put(file_obj, qsub_script_fpath)
+            submission_cmd = PBSCommand.qsub(qsub_script_fpath, pbs_conf, interactive=True)
+
+            logger.debug(f'pbs (interactive) mode:\n{submission_cmd}')
+            logger.debug(f'cd to {workdir}')
+            return self.client.run(submission_cmd, directory=workdir,
+                                   disown=False, env=allenv, pty=True, dry_run=dry_run)
+        else:
+            qsub_cmd = PBSCommand.qsub(cmd, pbs_conf, interactive=False)
+
+            # HACK: rather than submitting with `sbatch << EOF\n ...\n EOF`,
+            # I use `sbatch file-name` to avoid `$ENVVAR` to be evaluated right at the submission time
+            # I want the `$ENVVAR` to be evaluated after the compute is allocated.
+            qsub_lines = qsub_cmd.split('\n')[1:-1]  # Strip `qsub << EOF` and `EOF`
+
+            if env_from_host:
+                # HACK: Inject `export` for exposing envvars to singularity container,
+                # right after the last line that starts with `#SBATCH`.
+                exports = [f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host]
+                exports += [f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host]
+                qsub_lines = qsub_lines[:-1] + exports + qsub_lines[-1:]
+            exec_file = '\n'.join(qsub_lines)
+
+            # TODO: If you're running a sweep, the content of the file should stay the same.
+            # thus there shouldn't be a need to run these every time.
+            file_obj = StringIO(exec_file)
+            qsub_script_fpath = Path(self.lmndirs.scriptdir) / f'.sbatch-script-{timestamp}.sh'
+            self.client.put(file_obj, qsub_script_fpath)
+
+            logger.debug(f'pbs (non-interactive) mode\n===============\n{exec_file}\n===============')
+            logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
+
+            cmd = f'qsub {qsub_script_fpath}'
+            result = self.client.run(cmd, directory=workdir,
+                                     disown=False, env=allenv, dry_run=dry_run)
+            if result.stderr:
+                logger.warning('qsub (non-interactive) failed:', result.stderr)
+            # Format:
+            # qsub: waiting for job 1176584.polaris-pbs-01.hsn.cm.polaris.alcf.anl.gov to start
+            # qsub: job 1176584.polaris-pbs-01.hsn.cm.polaris.alcf.anl.gov ready
+            # jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833
+            # logger.debug(f'jobid {jobid}')

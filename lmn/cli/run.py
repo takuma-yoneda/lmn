@@ -6,14 +6,15 @@ from pathlib import Path
 from argparse import ArgumentParser
 from argparse import Namespace
 from lmn import logger
-from lmn.helpers import find_project_root
-from lmn.config import SlurmConfig
-from lmn.helpers import replace_lmn_envvars
-from lmn.cli._config_loader import Project, Machine
+from lmn.helpers import find_project_root, replace_lmn_envvars
 from lmn.machine import SimpleSSHClient
+from lmn.runner import SlurmRunner, PBSRunner
+from lmn.cli.sync import _sync_output, _sync_code
 
-from lmn.runner import SlurmRunner
-from .sync import _sync_output, _sync_code
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from lmn.cli._config_loader import Project, Machine
 
 
 def _get_parser() -> ArgumentParser:
@@ -111,7 +112,6 @@ def _get_parser() -> ArgumentParser:
     )
     return parser
 
-from ._config_loader import Machine
 
 
 def parse_sweep_idx(sweep_str):
@@ -497,6 +497,188 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, slurm_conf=slurm_conf,
                               startup=startup, timestamp=timestamp, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
                               env=env, env_from_host=env_from_host, dry_run=run_opt.dry_run)
+
+
+    elif mode in ['pbs', 'pbs-sing', 'sing-pbs']:
+        # PBS-specific configurations
+        from lmn.scheduler.pbs import PBSConfig, PBSCommand
+        import randomname
+        import random
+        if 'slurm' not in machine.parsed_conf:
+            raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
+
+        # NOTE: slurm seems to be fine with duplicated name.
+        proj_name_maxlen = 15
+        rand_num = random.randint(0, 100)
+        job_name = f'lmn-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
+
+        # Parse from slurm config options (aside from default)
+        if parsed.pbsconf is not None:
+            logger.debug('parsed.sconf is specified. Loading custom preset conf.')
+            pbsconf = preset.get('pbs-configs', {}).get(parsed.pbsconf, {})
+            if pbsconf is None:
+                raise KeyError(f'configuration: {parsed.pbsconf} cannot be found in "slurm-configs".')
+
+        else:
+            pbsconf = machine.parsed_conf['pbs']
+        scheduler_conf = PBSConfig(job_name, **pbsconf)
+
+        if runtime_options.force:
+            logger.warn("`-f / --force` option has no effect in slurm mode")
+
+        # logger.info(f'slurm_conf: {machine.sconf}')
+        ssh_client = SimpleSSHClient(machine.remote_conf)
+        runner = PBSRunner(ssh_client, lmndirs)
+        run_opt = runtime_options
+
+        # Specify job name
+        name = f'{machine.user}-lmn-{project.name}'
+        if runtime_options.name is not None:
+            name = f'{name}--{run_opt.name}'
+        scheduler_conf.job_name = name
+
+        if mode in ['pbs-sing', 'sing-pbs']:
+            # Decorate run_opt.cmd for Singularity
+
+            # sconf = SlurmConfig(job_name, **mconf['slurm'])
+            if machine.parsed_conf is None or 'singularity' not in machine.parsed_conf:
+                raise ValueError('Entry "singularity" not found in the config file.')
+
+            image = machine.parsed_conf.get('singularity', {}).get('sif_file')
+            overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
+            writable_tmpfs = machine.parsed_conf.get('singularity', {}).get('writable_tmpfs', False)
+            container_startup = machine.parsed_conf.get('singularity', {}).get('startup', '')
+
+            # Overwrite lmn envvars.  Hmm I don't like this...
+            from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
+            sing_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
+
+            # TODO: Use get_lmndirs function!
+            # TODO: Do we need this??
+            env.update({
+                'LMN_PROJECT_NAME': project.name,
+                'LMN_CODE_DIR': sing_lmndirs.codedir,
+                'LMN_MOUNT_DIR': sing_lmndirs.mountdir,
+                'LMN_OUTPUT_DIR': sing_lmndirs.outdir,
+                'LMN_SCRIPT_DIR': sing_lmndirs.scriptdir,
+            })
+
+            # Backward compat
+            env.update({
+                'RMX_PROJECT_NAME': project.name,
+                'RMX_CODE_DIR': sing_lmndirs.codedir,
+                'RMX_MOUNT_DIR': sing_lmndirs.mountdir,
+                'RMX_OUTPUT_DIR': sing_lmndirs.outdir,
+                'RMX_SCRIPT_DIR': sing_lmndirs.scriptdir,
+            })
+
+            # NOTE: Without --containall, nvidia-smi command fails with "couldn't find libnvidia-ml.so library in your system."
+            # NOTE: Without bash -c '{cmd}', if you put PYTHONPATH=/foo/bar, it fails with no such file or directory 'PYTHONPATH=/foo/bar'
+            # TODO: Will the envvars be taken over to the internal shell (by this extra bash command)?
+            # sing_cmd = "singularity run --nv --containall {options} {sif_file} bash -c '{cmd}'"
+            sing_cmd = 'singularity run --nv --containall {options} {sif_file} bash -c -- "{cmd}"'
+            options = []
+
+            # Bind
+            bind = '-B {source}:{target}'
+            if not runtime_options.no_sync:
+                options += [bind.format(target=sing_lmndirs.codedir, source=lmndirs.codedir),
+                            bind.format(target=sing_lmndirs.outdir, source=lmndirs.outdir),
+                            bind.format(target=sing_lmndirs.mountdir, source=lmndirs.mountdir),
+                            bind.format(target=sing_lmndirs.scriptdir, source=lmndirs.scriptdir)]
+            options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
+
+            # Overlay
+            if overlay:
+                options += [f'--overlay {overlay}']
+
+            if writable_tmpfs:
+                # This often solves the following error:
+                # OSError: [Errno 30] Read-only file system
+                options += ['--writable-tmpfs']
+
+            # Environment variables
+            # TODO: Better to use --env-file option and read from a file
+            # Escaping quotes and commas will be much easier in that way.
+            options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
+
+            # NOTE: Since CUDA_VISIBLE_DEVICES is often comma-separated values (i.e., CUDA_VISIBLE_DEVICES=0,1),
+            # and `singularity run --env FOO=BAR,HOGE=PIYO` considers comma to be a separator for envvars,
+            # It fails without special handling.
+            env_from_host = ['CUDA_VISIBLE_DEVICES', 'JOBID', 'JOB_ID_STEP_ID', 'HOSTNAME', 'NODE_IDENTIFIER', 'TASK_IDENTIFIER']
+
+            # Workdir
+            _workdir = sing_lmndirs.codedir / runtime_options.rel_workdir
+            options += [f'--pwd {_workdir}']
+
+            # Overwrite command
+            options = ' '.join(options)
+
+            if container_startup:
+                run_opt.cmd = f'{container_startup} && {run_opt.cmd}'
+
+            # Trying my best to escape quotations (https://stackoverflow.com/a/18886646/19913466)
+            logger.debug(f'run_opt.cmd before escape: {run_opt.cmd}')
+            escaped_cmd = run_opt.cmd.encode('unicode-escape').replace(b'"', b'\\"').decode('utf-8')
+            logger.debug(f'run_opt.cmd after escape: {escaped_cmd}')
+
+            run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=escaped_cmd)
+
+        timestamp = f"{time.time():.5f}".split('.')[-1]  # 5 subdigits of the timestamp
+        print_conf(mode, machine, image=image if mode in ['pbs-sing', 'sing-pbs'] else None)
+        if run_opt.sweep:
+            if not run_opt.disown:
+                logger.error("You must set -d option to use sweep functionality.")
+                import sys; sys.exit(1)
+
+            if not parsed.contain:
+                logger.error("You should set --contain option to use sweep functionality.")
+                import sys; sys.exit(1)
+
+            sweep_ind = parse_sweep_idx(run_opt.sweep)
+
+            _scheduler_conf = deepcopy(scheduler_conf)
+            for sweep_idx in sweep_ind:
+                # NOTE: This special prefix "SINGULARITYENV_" is stripped and the rest is passed to singularity container,
+                # even with --containall or --cleanenv !!
+                # Example: (https://docs.sylabs.io/guides/3.1/user-guide/environment_and_metadata.html?highlight=environment%20variable)
+                #     $ SINGULARITYENV_HELLO=world singularity exec centos7.img env | grep HELLO
+                #     HELLO=world
+                env.update({
+                    'SINGULARITYENV_LMN_RUN_SWEEP_IDX': sweep_idx,
+                    'APPTAINERENV_LMN_RUN_SWEEP_IDX': sweep_idx,
+                })
+
+                # Oftentimes, a user specifies $LMN_RUN_SWEEP_IDX as an argument to the command,
+                # and that will be evaluated right before singularity launches
+                env.update({'LMN_RUN_SWEEP_IDX': sweep_idx, 'RMX_RUN_SWEEP_IDX': sweep_idx})
+
+                _name = f'{_scheduler_conf.job_name}-{timestamp}-{sweep_idx}'
+                logger.info(f'Launching sweep {sweep_idx}: {_name}')
+                scheduler_conf.job_name = _name
+
+                runner.exec(run_opt.cmd, run_opt.rel_workdir, _scheduler_conf,
+                            startup=startup,
+                            timestamp=timestamp,
+                            interactive=False,
+                            num_sequence=run_opt.num_sequence,
+                            env=env,
+                            env_from_host=env_from_host,
+                            dry_run=run_opt.dry_run)
+        else:
+            slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, _scheduler_conf,
+                              startup=startup,
+                              timestamp=timestamp,
+                              interactive=not run_opt.disown,
+                              num_sequence=run_opt.num_sequence,
+                              env=env,
+                              env_from_host=env_from_host,
+                              dry_run=run_opt.dry_run)
+
+
+
+
+
     else:
         raise ValueError(f'Unrecognized mode: {mode}')
 
