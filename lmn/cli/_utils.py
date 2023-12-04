@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import os
 import subprocess
+import sys
 from lmn import logger
 
 def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, transfer_rootdir=True):
@@ -58,3 +60,17 @@ def run_cmd(cmd, get_output=False, shell=False) -> subprocess.CompletedProcess:
     else:
         res = subprocess.run(cmd, shell=shell, capture_output=True)
         return res
+
+
+def run_cmd2(cmd, shell: bool = True, raise_on_error: bool = False):
+    subprocess_env = dict(os.environ)
+    result = subprocess.run(cmd,
+                            stdout=sys.stdout, stderr=sys.stderr,
+                            env=subprocess_env,
+                            shell=shell)
+    # Check for errors
+    if raise_on_error and result.returncode != 0:
+        msg = "The command {} returned exit code {}".format(cmd, result.returncode)
+        raise RuntimeError(msg)
+
+    return result

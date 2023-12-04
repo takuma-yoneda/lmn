@@ -65,7 +65,7 @@ class PBSCommand:
 
     @staticmethod
     def qsub_from_dict(run_cmd: str, pbs_config: dict, qsub_cmd: str = 'qsub', interactive: bool = False,
-                       convert: bool = True, shell: str = '/usr/bin/env bash'):
+                       convert: bool = True):
 
         args = PBSCommand.make_options(pbs_config)
         if interactive:
@@ -74,13 +74,14 @@ class PBSCommand:
             batch_args = (f'#PBS {arg}' for arg in args)
             cmd = '\n'.join((
                 qsub_cmd + ' << EOF',
-                '\n'.join((f'#!{shell}', '', *batch_args, '')),
+                '\n'.join(('#!/usr/bin/env bash', '', *batch_args, '')),
                 run_cmd.replace('$', '\\$') if convert else run_cmd,
                 'EOF',
             ))
 
         return cmd
 
+    @staticmethod
     def qsub(run_cmd: str, pbs_config: PBSConfig, qsub_cmd: str = 'qsub', interactive: bool = False,
              convert: bool = True):
 

@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 from argparse import Namespace
 from lmn import logger
 from lmn.helpers import find_project_root, replace_lmn_envvars
-from lmn.machine import SimpleSSHClient
+from lmn.machine import SimpleSSHClient, CLISSHClient
 from lmn.runner import SlurmRunner, PBSRunner
 from lmn.cli.sync import _sync_output, _sync_code
 
@@ -45,6 +45,11 @@ def _get_parser() -> ArgumentParser:
         "--sconf",
         default=None,
         help="specify a slurm configuration to be used"
+    )
+    parser.add_argument(
+        "--pbsconf",
+        default=None,
+        help="specify a PBS configuration to be used"
     )
     parser.add_argument(
         "--dconf",
@@ -207,7 +212,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
     if mode == 'ssh':
         from lmn.runner import SSHRunner
-        ssh_client = SimpleSSHClient(machine.remote_conf)
+        # ssh_client = SimpleSSHClient(machine.remote_conf)
+        ssh_client = CLISSHClient(machine.remote_conf)
         ssh_runner = SSHRunner(ssh_client, lmndirs)
         print_conf(mode, machine)
         ssh_runner.exec(runtime_options.cmd,
@@ -359,7 +365,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             logger.warn("`-f / --force` option has no effect in slurm mode")
 
         # logger.info(f'slurm_conf: {machine.sconf}')
-        ssh_client = SimpleSSHClient(machine.remote_conf)
+        # ssh_client = SimpleSSHClient(machine.remote_conf)
+        ssh_client = CLISSHClient(machine.remote_conf)
         slurm_runner = SlurmRunner(ssh_client, lmndirs)
         run_opt = runtime_options
 
@@ -504,7 +511,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         from lmn.scheduler.pbs import PBSConfig, PBSCommand
         import randomname
         import random
-        if 'slurm' not in machine.parsed_conf:
+        if 'pbs' not in machine.parsed_conf:
             raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
 
         # NOTE: slurm seems to be fine with duplicated name.
@@ -666,14 +673,14 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                             env_from_host=env_from_host,
                             dry_run=run_opt.dry_run)
         else:
-            slurm_runner.exec(run_opt.cmd, run_opt.rel_workdir, _scheduler_conf,
-                              startup=startup,
-                              timestamp=timestamp,
-                              interactive=not run_opt.disown,
-                              num_sequence=run_opt.num_sequence,
-                              env=env,
-                              env_from_host=env_from_host,
-                              dry_run=run_opt.dry_run)
+            runner.exec(run_opt.cmd, run_opt.rel_workdir, scheduler_conf,
+                        startup=startup,
+                        timestamp=timestamp,
+                        interactive=not run_opt.disown,
+                        num_sequence=run_opt.num_sequence,
+                        env=env,
+                        env_from_host=env_from_host,
+                        dry_run=run_opt.dry_run)
 
 
 

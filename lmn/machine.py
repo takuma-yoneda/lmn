@@ -33,10 +33,74 @@ class RemoteConfig:
         config = Config()
         config.user = self.user
         conn = Connection(host=self.host, config=config, inline_ssh_env=True)
+        conn.client.load_system_host_keys()
+
+        if self.auth_interactive_dumb:
+            from lmn.helper.ssh import overwrite_auth_fn
+            conn.client = overwrite_auth_fn(conn.client)
+
+        self._conn = conn
         return conn
 
     def get_dict(self):
         return {key: val for key, val in vars(self).items() if not (key.startswith('__') or callable(val))}
+
+    def __del__(self):
+        # Close the connection when the instance is destructed
+        if self._conn:
+            self._conn.close()
+
+
+class CLISSHClient:
+    """Use the native CLI to run ssh"""
+    def __init__(self, remote_conf: RemoteConfig) -> None:
+        self.remote_conf = remote_conf
+        self.conn = self.remote_conf.get_connection()
+
+    def uri(self, path):
+        return f'{self.remote_conf.base_uri}:{path}'
+
+    def run(self, cmd, directory="$HOME", disown=False, hide=False, env=None, pty=False, dry_run=False):
+        from lmn.cli._utils import run_cmd2
+        import re
+        # TODO: Support disown (if that is necessary for sweep)
+        env = {} if env is None else env
+
+        # Perform shell escaping for envvars
+        # NOTE: Fabric seems to have an issue to handle envvar that contains spaces...
+        # This is the issue of using "inline_ssh_env" that essentially sets envvars by putting bunch of export KEY=VAL before running shells.
+        # The documentation clearly says developers need to handle shell escaping for non-trivial values.
+        # TEMP: shell escaping only when env contains space
+        import shlex
+        env = {key: shlex.quote(str(val)) if " " in str(val) else str(val) for key, val in env.items()}
+
+        # NOTE:
+        # -t: Force pseudo-terminal allocation.
+        ssh_base_cmd = f'ssh -t {self.remote_conf.base_uri} '
+        ssh_cmd = ''
+        if directory is not None:
+            ssh_cmd += f'cd {directory} && '
+        ssh_cmd += f'{cmd}'
+        ssh_cmd = f"'{ssh_cmd}'"
+        ssh_cmd = ssh_base_cmd + ssh_cmd
+        print('ssh cmd', ssh_cmd)
+
+        result = run_cmd2(ssh_cmd)
+
+        return result
+
+    def put(self, fpath, target_path=None):
+        from lmn.cli._utils import run_cmd2
+        cmd = ['scp', fpath, f'{self.remote_conf.base_uri}:{target_path}']
+        result = run_cmd2(cmd, shell=False)
+        return result
+
+    def port_forward(self):
+        raise NotImplementedError
+
+    def x_forward(self):
+        raise NotImplementedError
+
 
 
 class SimpleSSHClient:
