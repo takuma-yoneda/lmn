@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from typing import List
+from copy import deepcopy
 
 
 class PBSConfig:
@@ -46,9 +47,14 @@ class PBSCommand:
         Example: ['-I', '-l filesystems=home:grand', '-l select=1', ...]
         """
         needs_special_handling = ['l', 'I']
+        pbs_config = deepcopy(pbs_config)
 
         # We need a special handling on `-l` option, since it is allowed to appear multiple times in a command.
-        args = [f'-{PBSCommand._valid_key(k)} {v}' for k, v in pbs_config.items() if k not in needs_special_handling and v is not None]
+        args = [
+            f"-{PBSCommand._valid_key(k)} {v}"
+            for k, v in pbs_config.items()
+            if k not in needs_special_handling and v is not None
+        ]
 
         # Expand `-l` option (list)
         if 'l' in pbs_config:
@@ -107,11 +113,11 @@ class PBSCommand:
             'q': pbs_config.queue,  # Where the job is sent upon submission.
             # 'r':  # Declares whether the job is rerunnable. format: `-r <y|n>`
             # R  # Specifies whether standard output and/or standard error files are automatically removed (deleted) upon job completion.
-            'S': pbs_config.shell,
+            # 'S': pbs_config.shell,
             # u
             # 'v': ...,  # Lists environment variables and shell functions to be exported to the job. <- Let's rather use export explicitly.
             # V  # All environment variables and shell functions in the user's login environment where qsub is run are exported to the job.
             # 'W': ...,  # The -W option allows specification of some job attributes.  Some job attributes must be specified using this option.
             # z  # Job identifier is not written to standard output.
         }
-        return PBSCommand.qsub_from_dict(run_cmd, pbs_dict, qsub_cmd, interactive, convert, shell)
+        return PBSCommand.qsub_from_dict(run_cmd, pbs_dict, qsub_cmd, interactive, convert)

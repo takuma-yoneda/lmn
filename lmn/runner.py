@@ -245,7 +245,9 @@ class SlurmRunner:
 
         slurm_options = []
         exports = [f'export {key}={val}' for key, val in allenv.items()]
+
         if env_from_host:
+            # Only matters for Singularity
             exports += [
                 *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
                 *[f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host],
@@ -278,66 +280,9 @@ class SlurmRunner:
 
         self.client.run(cmd, directory=workdir, disown=False, dry_run=dry_run)
 
-        # if interactive:
-        #     # cmd = f'{shell} -i -c \'{cmd}\''
-        #     # Create a temp bash file and put it on the remote server.
-        #     # TODO: Can we just put all the `allenv` vars here??
-        #     exec_str = '\n'.join((
-        #         f'#!/usr/bin/env {s.shell}',
-        #         *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
-        #         *[f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host],
-        #         cmd
-        #     ))
-        #     logger.debug(f'exec file: {exec_str}')
-        #     srun_script_fpath = Path(self.lmndirs.scriptdir) / f'.srun-script-{timestamp}.sh'
-        #     with NamedTemporaryFile(mode='w+') as temp_file:
-        #         temp_file.write(exec_str)  # Write the string to the temporary file
-        #         temp_file.flush()  # This is necessary!!
-        #         self.client.put(temp_file.name, srun_script_fpath)
-        #     cmd = slurm_command.srun(str(srun_script_fpath), pty=s.shell)
-
-        #     logger.debug(f'srun mode:\n{cmd}')
-        #     logger.debug(f'cd to {workdir}')
-        #     return self.client.run(cmd, directory=workdir, disown=False, dry_run=dry_run)
-        # else:
-        #     sbatch_cmd = slurm_command.sbatch(cmd, shell=f'/usr/bin/env {s.shell}')
-
-        #     # HACK: rather than submitting with `sbatch << EOF\n ...\n EOF`,
-        #     # I use `sbatch file-name` to avoid `$ENVVAR` to be evaluated right at the submission time
-        #     # I want the `$ENVVAR` to be evaluated after the compute is allocated.
-        #     sbatch_lines = sbatch_cmd.split('\n')[1:-1]  # Strip `sbatch << EOF` and `EOF`
-
-        #     # TODO: Can we just put all the `allenv` vars here??
-        #     if env_from_host:
-        #         # HACK: Inject `export` for exposing envvars to singularity container,
-        #         # right after the last line that starts with `#SBATCH`.
-        #         exports = [f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host]
-        #         exports += [f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host]
-        #         sbatch_lines = sbatch_lines[:-1] + exports + sbatch_lines[-1:]
-        #     exec_str = '\n'.join(sbatch_lines)
-
-        #     # TODO: If you're running a sweep, the content of the file should stay the same.
-        #     # thus there shouldn't be a need to run these every time.
-
-        #     sbatch_script_fpath = Path(self.lmndirs.scriptdir) / f'.sbatch-script-{timestamp}.sh'
-        #     with NamedTemporaryFile(mode='w+') as temp_file:
-        #         temp_file.write(exec_str)  # Write the string to the temporary file
-        #         temp_file.flush()  # This is necessary!!
-        #         self.client.put(temp_file.name, sbatch_script_fpath)
-
-        #     logger.debug(f'sbatch mode\n===============\n{exec_str}\n===============')
-        #     logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
-
-        #     cmd = '\n'.join([f'sbatch {sbatch_script_fpath}'] * num_sequence)
-        #     self.client.run(cmd, directory=workdir, disown=False, dry_run=dry_run)
-        #     # result = self.client.run(cmd, directory=workdir, disown=False, dry_run=dry_run)
-        #     # if result.stderr:
-        #     #     logger.warning('sbatch job submission failed:', result.stderr)
-        #     # jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833
-        #     # logger.debug(f'jobid {jobid}')
 
 class PBSRunner:
-    def __init__(self, client: SimpleSSHClient, lmndirs: Namespace) -> None:
+    def __init__(self, client: CLISSHClient, lmndirs: Namespace) -> None:
         self.client = client
         self.lmndirs = lmndirs
 
@@ -353,13 +298,6 @@ class PBSRunner:
         if isinstance(cmd, list):
             cmd = ' '.join(cmd)
 
-        # Tasks:
-        # - Prepare list of environment variables
-        # - Decorate the command (to be run inside of a container),
-        #   and pack it into a file (exec_file)
-        # - Create a job submission (scheduler-specific) command
-        # - Execute the command in the remote machine
-
         lmnenv = get_lmnenvs(cmd, self.lmndirs)
         allenv = {**env, **lmnenv}
         allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
@@ -371,7 +309,9 @@ class PBSRunner:
 
         slurm_options = []
         exports = [f'export {key}={val}' for key, val in allenv.items()]
+
         if env_from_host:
+            # Only matters for Singularity
             exports += [
                 *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
                 *[f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host],
@@ -390,6 +330,7 @@ class PBSRunner:
             *exports,
             cmd
         ))
+        logger.debug(f'\n=== execution string ===\n{exec_str}\n========================')
 
         script_fpath = Path(self.lmndirs.scriptdir) / f'.script-{timestamp}.sh'
         with NamedTemporaryFile(mode='w+') as temp_file:
@@ -402,100 +343,5 @@ class PBSRunner:
         else:
             cmd = '\n'.join([f'qsub {script_fpath}'] * num_sequence)
 
+        logger.debug(f'submission command: {cmd}')
         self.client.run(cmd, directory=workdir, disown=False, dry_run=dry_run)
-
-
-# class PBSRunner:
-#     def __init__(self, client: SimpleSSHClient, lmndirs: Namespace) -> None:
-#         self.client = client
-#         self.lmndirs = lmndirs
-
-#     def exec(self, cmd: str, relative_workdir, pbs_conf: PBSConfig, env: Optional[dict] = None,
-#              env_from_host: List[str] = [],
-#              startup: str = "", timestamp: str = "", num_sequence: int = 1,
-#              interactive: bool = None, dry_run: bool = False):
-#         from lmn.scheduler.pbs import PBSCommand
-#         env = {} if env is None else env
-
-#         assert num_sequence == 1, 'Jobs with dependency are not supported on PBS mode yet.'
-
-#         if isinstance(cmd, list):
-#             cmd = ' '.join(cmd)
-
-#         # Tasks:
-#         # - Prepare list of environment variables
-#         # - Decorate the command (to be run inside of a container),
-#         #   and pack it into a file (exec_file)
-#         # - Create a job submission (scheduler-specific) command
-#         # - Execute the command in the remote machine
-
-#         lmnenv = get_lmnenvs(cmd, self.lmndirs)
-#         allenv = {**env, **lmnenv}
-#         allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
-
-#         if startup:
-#             cmd = f'{startup} && {cmd}'
-
-#         workdir = Path(self.lmndirs.codedir) / relative_workdir
-#         if interactive:
-#             # cmd = f'{shell} -i -c \'{cmd}\''
-#             # Create a temp bash file and put it on the remote server.
-#             exec_file = '\n'.join((
-#                 '#!/usr/bin/env bash',
-#                 *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
-#                 *[f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host],
-#                 cmd  # Command to run inside of a container
-#             ))
-#             logger.debug(f'exec file: {exec_file}')
-#             file_obj = StringIO(exec_file)
-#             qsub_script_fpath = Path(self.lmndirs.scriptdir) / f'.qsub-script-{timestamp}.sh'
-
-#             # TEMP
-#             self.client.run(
-#                 f'mkdir -p {self.lmndirs.scriptdir} && '
-#                 f'mkdir -p {self.lmndirs.codedir} && '
-#                 f'mkdir -p {self.lmndirs.outdir}'
-#             )
-
-#             self.client.put(file_obj, qsub_script_fpath)
-#             submission_cmd = PBSCommand.qsub(str(qsub_script_fpath), pbs_conf, interactive=True)
-
-#             logger.debug(f'pbs (interactive) mode:\n{submission_cmd}')
-#             logger.debug(f'cd to {workdir}')
-#             return self.client.run(submission_cmd, directory=workdir,
-#                                    disown=False, env=allenv, pty=True, dry_run=dry_run)
-#         else:
-#             qsub_cmd = PBSCommand.qsub(cmd, pbs_conf, interactive=False)
-
-#             # HACK: rather than submitting with `sbatch << EOF\n ...\n EOF`,
-#             # I use `sbatch file-name` to avoid `$ENVVAR` to be evaluated right at the submission time
-#             # I want the `$ENVVAR` to be evaluated after the compute is allocated.
-#             qsub_lines = qsub_cmd.split('\n')[1:-1]  # Strip `qsub << EOF` and `EOF`
-
-#             if env_from_host:
-#                 # HACK: Inject `export` for exposing envvars to singularity container,
-#                 # right after the last line that starts with `#SBATCH`.
-#                 exports = [f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host]
-#                 exports += [f'export APPTAINERENV_{envvar}=${envvar}' for envvar in env_from_host]
-#                 qsub_lines = qsub_lines[:-1] + exports + qsub_lines[-1:]
-#             exec_file = '\n'.join(qsub_lines)
-
-#             # TODO: If you're running a sweep, the content of the file should stay the same.
-#             # thus there shouldn't be a need to run these every time.
-#             file_obj = StringIO(exec_file)
-#             qsub_script_fpath = Path(self.lmndirs.scriptdir) / f'.sbatch-script-{timestamp}.sh'
-#             self.client.put(file_obj, qsub_script_fpath)
-
-#             logger.debug(f'pbs (non-interactive) mode\n===============\n{exec_file}\n===============')
-#             logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
-
-#             cmd = f'qsub {qsub_script_fpath}'
-#             result = self.client.run(cmd, directory=workdir,
-#                                      disown=False, env=allenv, dry_run=dry_run)
-#             if result.stderr:
-#                 logger.warning('qsub (non-interactive) failed:', result.stderr)
-#             # Format:
-#             # qsub: waiting for job 1176584.polaris-pbs-01.hsn.cm.polaris.alcf.anl.gov to start
-#             # qsub: job 1176584.polaris-pbs-01.hsn.cm.polaris.alcf.anl.gov ready
-#             # jobid = result.stdout.strip().split()[-1]  # stdout format: Submitted batch job 8156833
-#             # logger.debug(f'jobid {jobid}')

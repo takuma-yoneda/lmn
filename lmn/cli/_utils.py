@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 import os
 import subprocess
 import sys
 from lmn import logger
+from lmn.machine import RemoteConfig
+from typing import List, Optional, Union
+from pathlib import Path
 
-def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, transfer_rootdir=True):
+
+def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_conf: RemoteConfig, options: Optional[List[str]] = None,
+          exclude: Optional[List[str]] = None, dry_run: bool = False, transfer_rootdir: bool = True):
     """
     source_dir: hoge/fuga/source-dir/content-files
     target_dir: Hoge/Fuga/target-dir
@@ -20,18 +26,22 @@ def rsync(source_dir, target_dir, options='', exclude=None, dry_run=False, trans
 
     import shutil
     exclude = [] if exclude is None else exclude
+    options = [] if options is None else options
+
     # make sure rsync is installed
     if shutil.which("rsync") is None:
-        raise RuntimeError("rsync binary is not found.")
-    # ---
-    logger.info(f"Syncing code...")
+        raise RuntimeError("rsync command is not found.")
+
     source_dir = str(source_dir).rstrip('/') + ('' if transfer_rootdir else '/')
     target_dir = str(target_dir).rstrip('/') + '/'
+    logger.info(f"Syncing code... ({remote_conf.base_uri}:{target_dir})")
 
-    exclude_str = ' '.join(f'--exclude \'{ex}\'' for ex in exclude)
-
-    # cmd = f"rsync --info=progress2 --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
-    cmd = f"rsync --progress --stats --archive --compress {exclude_str} {options} {source_dir} {target_dir}"
+    # TODO: Move the ControlPath to global config
+    options += [f'-e "ssh -o \'ControlPath=~/.ssh/lmn-ssh-socket-{remote_conf.host}\'"']
+    options += ['--archive', '--compress']
+    options += [f'--exclude \'{ex}\'' for ex in exclude]
+    options_str = ' '.join(options)
+    cmd = f"rsync {options_str} {source_dir} {remote_conf.base_uri}:{target_dir}"
     logger.debug(f'running command: {cmd}')
 
     if not dry_run:
@@ -64,6 +74,7 @@ def run_cmd(cmd, get_output=False, shell=False) -> subprocess.CompletedProcess:
 
 def run_cmd2(cmd, shell: bool = True, raise_on_error: bool = False):
     subprocess_env = dict(os.environ)
+    logger.debug(f'running command: {cmd}')
     result = subprocess.run(cmd,
                             stdout=sys.stdout, stderr=sys.stderr,
                             env=subprocess_env,

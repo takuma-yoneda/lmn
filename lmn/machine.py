@@ -20,8 +20,8 @@ class RemoteConfig:
     def __init__(self, user, host, port=22, slurm_node=False) -> None:
         self.user = user
         self.host = host
+        self._conn = None
         # self.port = port
-        self.slurm_node = slurm_node
 
     @property
     def base_uri(self) -> str:
@@ -63,6 +63,7 @@ class CLISSHClient:
     def run(self, cmd, directory="$HOME", disown=False, hide=False, env=None, pty=False, dry_run=False):
         from lmn.cli._utils import run_cmd2
         import re
+        # TODO: remove `env`: handle that within `cmd`!
         # TODO: Support disown (if that is necessary for sweep)
         env = {} if env is None else env
 
@@ -76,23 +77,26 @@ class CLISSHClient:
 
         # NOTE:
         # -t: Force pseudo-terminal allocation.
-        ssh_base_cmd = f'ssh -t {self.remote_conf.base_uri} '
-        ssh_cmd = ''
+        ssh_options = ['-t', f'-o ControlPath=~/.ssh/lmn-ssh-socket-{self.remote_conf.host}']
+        ssh_base_cmd = f'ssh {" ".join(ssh_options)} {self.remote_conf.base_uri}'
+
+        remote_cmds = []
         if directory is not None:
-            ssh_cmd += f'cd {directory} && '
-        ssh_cmd += f'{cmd}'
-        ssh_cmd = f"'{ssh_cmd}'"
-        ssh_cmd = ssh_base_cmd + ssh_cmd
-        print('ssh cmd', ssh_cmd)
+            remote_cmds += [f'cd {directory}']
+            # ssh_cmd += f'cd {directory} && '
+        remote_cmds += [cmd]
 
+        ssh_cmd = f"{ssh_base_cmd} '{' && '.join(remote_cmds)}'"
         result = run_cmd2(ssh_cmd)
-
         return result
 
     def put(self, fpath, target_path=None):
         from lmn.cli._utils import run_cmd2
-        cmd = ['scp', fpath, f'{self.remote_conf.base_uri}:{target_path}']
-        result = run_cmd2(cmd, shell=False)
+        # TODO: Move the ControlPath to global config
+        options = [f'-o ControlPath=$HOME/.ssh/lmn-ssh-socket-{self.remote_conf.host}']
+        options = [os.path.expandvars(opt) for opt in options]
+        cmd = ['scp', *options, fpath, f'{self.remote_conf.base_uri}:{target_path}']
+        result = run_cmd2(cmd, shell=False)  # Setting shell=False to get the return code
         return result
 
     def port_forward(self):
@@ -100,7 +104,6 @@ class CLISSHClient:
 
     def x_forward(self):
         raise NotImplementedError
-
 
 
 class SimpleSSHClient:

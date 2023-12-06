@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 from argparse import Namespace
 from lmn import logger
 from lmn.helpers import find_project_root, replace_lmn_envvars
-from lmn.machine import SimpleSSHClient, CLISSHClient
+from lmn.machine import CLISSHClient
 from lmn.runner import SlurmRunner, PBSRunner
 from lmn.cli.sync import _sync_output, _sync_code
 
@@ -166,6 +166,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
     else:
         cmd = parsed.remote_command
 
+    # TODO: Let's use Pydantic
     runtime_options = Namespace(dry_run=parsed.dry_run,
                                 cmd=cmd,
                                 rel_workdir=rel_workdir,
@@ -177,6 +178,12 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                                 sconf=parsed.sconf,
                                 dconf=parsed.dconf,
                                 force=parsed.force)
+
+    # TODO:
+    # - If configured, run a pre-flight ssh with ControlMaster to establish & retain the connection
+    # - The following ssh / rsync should rely on this connection
+    from lmn.helpers import establish_persistent_ssh
+    establish_persistent_ssh(machine.remote_conf)
 
     # Sync code first
     if parsed.no_sync:
@@ -534,7 +541,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             logger.warn("`-f / --force` option has no effect in slurm mode")
 
         # logger.info(f'slurm_conf: {machine.sconf}')
-        ssh_client = SimpleSSHClient(machine.remote_conf)
+        ssh_client = CLISSHClient(machine.remote_conf)
         runner = PBSRunner(ssh_client, lmndirs)
         run_opt = runtime_options
 
