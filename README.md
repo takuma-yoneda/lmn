@@ -5,17 +5,198 @@
 <!--     <img src="https://github.com/takuma-yoneda/lmn/actions/workflows/python-publish-pypi.yml/badge.svg" alt="Publish to PyPI" /> -->
 <!-- </a> -->
 
-A lightweight tool to rsync and execute local scripts in a remote machine.
+A lightweight tool to run your local project in a remote machine, with one command.  
+`lmn` can set up a container environment (Docker or Singularity) and work with job schedulers (Slurm or PBS).
+
+<!-- `lmn` is a lightweight launcher. `lmn` allows you to seamlessly launch scripts across multiple remote machines. -->
+<!-- A lightweight tool to rsync and execute local scripts in a remote machine. -->
 
 <a href="https://github.com/takuma-yoneda/lmn/actions/workflows/python-run-tests.yml">
     <img src="https://github.com/takuma-yoneda/lmn/actions/workflows/python-run-tests.yml/badge.svg" alt="Test" />
 </a>
-<a href="https://github.com/takuma-yoneda/lmn">
+<!-- <a href="https://github.com/takuma-yoneda/lmn">
     <img src="https://tokei.rs/b1/github/takuma-yoneda/lmn" alt="Total lines" />
-</a>
+</a> -->
 <a href="https://pypi.org/project/lmn/">
     <img src="https://img.shields.io/pypi/v/lmn?logo=python&logoColor=%23cccccc" alt="PyPI" />
 </a>
 </div>
 
-Inspired by [afdaniele/cpk](https://github.com/afdaniele/cpk) and [geyang/jaynes](https://github.com/geyang/jaynes).
+# 🧑‍💻 `lmn` in action:
+In your project directory, you can simply run
+```bash
+$ lmn run <your-machine> -- python generate_fancy_images.py
+```
+This does the following:
+1. **rsync your local project directory** with the remote machine `your-machine` <!-- (the root of the project dir is identified by the location of `.git` or `.lmn.json5`) -->
+2. **ssh into the remote machine `your-machine`** and (optionally) set up the specified environment (Docker or Singularity) and run `python generate_fancy_images.py` in it
+3. Inside of the environment, **`lmn` runs `python generate_fancy_images.py`**
+4. If some files are created (such as images), **`lmn` rsync the generated files back to the local project directory**
+
+
+# 🚀 Quickstart
+You can install `lmn` via pip:
+```bash
+$ pip install lmn
+```
+
+In your project directory, place configuration file `.lmn.json5`.
+The config file looks like:
+<details>
+<summary>Example config</summary>
+```json5
+{
+    "project": {
+        "name": "my_project",
+        // What not to rsync with the remote machine:
+        "exclude": [".git", ".venv", "wandb", "__pycache__"],
+        // Project-specific environment variables:
+        "environment": {
+            "MUJOCO_GL": "egl"
+        }
+    },
+    "machines": {
+        "elm": {
+            // Host information
+            "host": "elm.ttic.edu",
+            "user": "takuma",
+            // Rsync target directory (on the remote host)
+            "root_dir": "/scratch/takuma/rmx",
+            // Mode: ["ssh", "docker", "slurm", "pbs", "slurm-sing", "pbs-sing"]
+            "mode": "docker",
+            // Docker configurations
+            "docker": {
+                "image": "ripl/my_transformer:latest",
+                "network": "host",
+            },
+            // Mount configurations (host -> container)
+            "mount_from_host": {
+                "/ripl/user/takuma/project/": "/project",
+                "/dev/shm": "/dev/shm",
+            },
+            // Host-specific environment variables
+            "environment": {
+                "PROJECT_DIR": "/project",
+            },
+        },
+        "tticslurm": {
+            "host": "slurm.ttic.edu",
+            "user": "takuma",
+            "mode": "slurm-sing",
+            "root_dir": "/share/data/ripl-takuma/rmx",
+            // Slurm job configurations
+            "slurm": {
+                "partition": "contrib-gpu",
+                "cpus_per_task": 1,
+                "time": "04:00:00",
+                "output": "slurm-%j.out.log",
+                "error": "slurm-%j.error.log",
+                "exclude": "gpu0,gpu18",
+            },
+            // Singularity configurations
+            "singularity": {
+                "sif_file": "/share/data/ripl-takuma/singularity/my_transformer.sif",
+                "startup": "ldconfig /.singularity.d/libs",
+                "writable_tmpfs": true,
+            },
+            "mount_from_host": {
+                "/share/data/ripl-takuma/project/": "/project",
+            },
+            "environment": {
+                "PROJECT_DIR": "/project",
+            }
+        }
+    }
+}
+```
+</details>
+More example configurations can be found in [the example directory](example/README.md).
+
+**Launch an interactive shell in the docker container (on elm)**
+```
+$ lmn run elm -- bash
+```
+
+**Run a job in the docker container (on elm)**
+```
+$ lmn run elm -- python train.py
+```
+
+**Run a script on the host (on elm)**
+```
+$ lmn run elm --mode ssh -- python hello.py
+```
+
+**Check GPU usage on elm**
+```
+$ lmn nv elm
+```
+This is just a shorthand of `lmn run elm --mode ssh -- nvidia-smi`
+
+**Launch an interactive shell in the Singularity container via Slurm scheduler (on tticslurm)**
+```
+$ lmn run tticslurm -- bash
+```
+
+**Run a job in the Singularity container via Slurm scheduler (on tticslurm**)
+```
+$ lmn run tticslurm -- python train.py
+```
+
+**Submit a batch job that runs in the Singularity container via Slurm scheduler (on tticslurm**)
+```
+$ lmn run tticslurm -d -- python train.py
+```
+
+**Launching a sweep (batch jobs) that runs in the Singularity container via Slurm scheduler (on tticslurm)**
+```
+$ lmn run tticslurm --sweep 0-10 -d -- python train.py -l '$LMN_RUN_SWEEP_IDX'
+```
+This submits 10 batch jobs where `$LMN_RUN_SWEEP_IDX` is set from 0 to 9.
+<details>
+<summary>More examples of `--sweep` format</summary>
+- `--sweep 0-10`: ten jobs with `LMN_RUN_SWEEP_IDX=0`, `1` through `9`
+  - Internally `lmn` simply runs `range(0, 10)`
+- `--sweep 7`: a single job with `LMN_RUN_SWEEP_IDX=7`
+- `--sweep 3,5,8`:  three jobs with `LMN_RUN_SWEEP_IDX=3` and `5` and `8`
+</details>
+
+**Run a script on the login node**
+```
+$ lmn run tticslurm --mode ssh -- squeue -u takuma
+```
+
+<!-- # Paramiko fails in ssh-authentication?
+- Make sure you can ssh manually
+- Make sure to run `ssh-add <your-ssh-key>` even if you can log in manually -->
+
+<!-- # Best practice
+## Singularity
+- Never install / store anything under the home directory when you build the image
+- Singularity mounts host's home directory as default
+- Even if you specify `--contain`, it will create an empty home directory...
+-->
+
+
+<!-- ## Project structure
+- project-root
+  - docker
+    - Dockerfile
+    - Makefile
+  - donottransport
+    - whatever large files you don't need on remote side
+    
+## Slurm
+- If you share a directory
+  - add `umask 002` in your `~/.bashrc` to allow group write permission as default -->
+
+# Comparison with other packages
+`lmn` is inspired by two great packages: [geyang/jaynes](https://github.com/geyang/jaynes) and [afdaniele/cpk](https://github.com/afdaniele/cpk).
+- `jaynes` focuses on launching a lot of jobs in detached (non-interactive) mode
+  - ✅ supports ssh, docker, slurm and AWS / GCP (but not PBS)
+  - 😢 does not support Singularity
+  - 😢 can only launch non-interactive jobs, and also is limited to Python projects
+- `cpk` focuses on (though not limited to) ROS application and running programs in docker containers
+  - ✅ supports X forwarding and more stuff that are helpful to run ROS applications on the container
+  - ✅ provides more functionalities such as creating and deploying ssh keys on remote machines
+  - 😢 does not support clusters with schedulers (Slurm or PBS), and does not support Singularity
