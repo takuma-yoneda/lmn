@@ -42,7 +42,7 @@ You can install `lmn` via pip:
 $ pip install lmn
 ```
 ### ▶️&nbsp;&nbsp;Configuration
-In your project directory, place configuration file at `project_dir/.lmn.json5`.
+All you need is to place a single configuration file at `project_dir/.lmn.json5` (on your local machine).  
 The config file looks like:
 <details>
 <summary>Example Configuration</summary>
@@ -113,10 +113,11 @@ The config file looks like:
 }
 ```
 </details>
-More example configurations can be found in [the example directory](example/README.md).
+
+More example configurations can be found in [the example directory](/example).
 
 ### ▶️&nbsp;&nbsp;Command examples
-Make sure that you're in the project directory
+Make sure that you're in the project directory first.
 ```bash
 # Launch an interactive shell in the docker container (on elm):
 $ lmn run elm -- bash
