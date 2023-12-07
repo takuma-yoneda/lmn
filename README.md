@@ -7,7 +7,7 @@
 
 A lightweight tool to run your local project on a remote machine, with a single command.
 
-`lmn` can set up a container environment (Docker or Singularity) and work with job schedulers (Slurm or PBS).
+`lmn` can set up a container environment (Docker or Singularity) and can work with job schedulers (Slurm or PBS).
 
 <!-- `lmn` is a lightweight launcher. `lmn` allows you to seamlessly launch scripts across multiple remote machines. -->
 <!-- A lightweight tool to rsync and execute local scripts in a remote machine. -->
