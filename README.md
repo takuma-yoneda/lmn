@@ -145,6 +145,12 @@ $ lmn run tticslurm --sweep 0-10 -d -- python train.py -l '$LMN_RUN_SWEEP_IDX'
 
 # Run a script on the login node (on tticslurm)
 $ lmn run tticslurm --mode ssh -- squeue -u takuma
+
+# Get help
+$ lmn --help
+
+# Get help on `lmn run`
+$ lmn run --help
 ```
 
 <details>
