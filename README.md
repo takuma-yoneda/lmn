@@ -5,7 +5,8 @@
 <!--     <img src="https://github.com/takuma-yoneda/lmn/actions/workflows/python-publish-pypi.yml/badge.svg" alt="Publish to PyPI" /> -->
 <!-- </a> -->
 
-A lightweight tool to run your local project in a remote machine, with one command.  
+A lightweight tool to run your local project on a remote machine, with a single command.
+
 `lmn` can set up a container environment (Docker or Singularity) and work with job schedulers (Slurm or PBS).
 
 <!-- `lmn` is a lightweight launcher. `lmn` allows you to seamlessly launch scripts across multiple remote machines. -->
@@ -25,25 +26,27 @@ A lightweight tool to run your local project in a remote machine, with one comma
 # 🧑‍💻 `lmn` in action:
 In your project directory, you can simply run
 ```bash
-$ lmn run <your-machine> -- python generate_fancy_images.py
+$ lmn run <remote-machine> -- python generate_fancy_images.py
 ```
-This does the following:
-1. **rsync your local project directory** with the remote machine `your-machine` <!-- (the root of the project dir is identified by the location of `.git` or `.lmn.json5`) -->
-2. **ssh into the remote machine `your-machine`** and (optionally) set up the specified environment (Docker or Singularity) and run `python generate_fancy_images.py` in it
+It does:
+1. **rsync your local project directory** with the remote machine <!-- (the root of the project dir is identified by the location of `.git` or `.lmn.json5`) -->
+2. **ssh into the remote machine**, (optionally) set up the specified env (Docker or Singularity)
 3. Inside of the environment, **`lmn` runs `python generate_fancy_images.py`**
-4. If some files are created (such as images), **`lmn` rsync the generated files back to the local project directory**
+4. If files are created (such as images), **`lmn` rsync the generated files back to the local project directory**
 
 
 # 🚀 Quickstart
+### ▶️&nbsp;&nbsp;Installation
 You can install `lmn` via pip:
 ```bash
 $ pip install lmn
 ```
-
-In your project directory, place configuration file `.lmn.json5`.
+### ▶️&nbsp;&nbsp;Configuration
+In your project directory, place configuration file at `project_dir/.lmn.json5`.
 The config file looks like:
 <details>
-<summary>Example config</summary>
+<summary>Example Configuration</summary>
+    
 ```json5
 {
     "project": {
@@ -61,7 +64,7 @@ The config file looks like:
             "host": "elm.ttic.edu",
             "user": "takuma",
             // Rsync target directory (on the remote host)
-            "root_dir": "/scratch/takuma/rmx",
+            "root_dir": "/scratch/takuma/lmn",
             // Mode: ["ssh", "docker", "slurm", "pbs", "slurm-sing", "pbs-sing"]
             "mode": "docker",
             // Docker configurations
@@ -83,7 +86,7 @@ The config file looks like:
             "host": "slurm.ttic.edu",
             "user": "takuma",
             "mode": "slurm-sing",
-            "root_dir": "/share/data/ripl-takuma/rmx",
+            "root_dir": "/share/data/ripl-takuma/lmn",
             // Slurm job configurations
             "slurm": {
                 "partition": "contrib-gpu",
@@ -96,8 +99,8 @@ The config file looks like:
             // Singularity configurations
             "singularity": {
                 "sif_file": "/share/data/ripl-takuma/singularity/my_transformer.sif",
-                "startup": "ldconfig /.singularity.d/libs",
                 "writable_tmpfs": true,
+                "startup": "ldconfig /.singularity.d/libs",  // Command to run at startup
             },
             "mount_from_host": {
                 "/share/data/ripl-takuma/project/": "/project",
@@ -112,59 +115,46 @@ The config file looks like:
 </details>
 More example configurations can be found in [the example directory](example/README.md).
 
-**Launch an interactive shell in the docker container (on elm)**
-```
+### ▶️&nbsp;&nbsp;Command examples
+Make sure that you're in the project directory
+```bash
+# Launch an interactive shell in the docker container (on elm):
 $ lmn run elm -- bash
-```
 
-**Run a job in the docker container (on elm)**
-```
+# Run a job in the docker container (on elm):
 $ lmn run elm -- python train.py
-```
 
-**Run a script on the host (on elm)**
-```
+# Run a script on the host (on elm):
 $ lmn run elm --mode ssh -- python hello.py
-```
 
-**Check GPU usage on elm**
-```
+# Check GPU usage on elm (This is equivalent to `lmn run elm --mode ssh -- nvidia-smi`)
 $ lmn nv elm
-```
-This is just a shorthand of `lmn run elm --mode ssh -- nvidia-smi`
 
-**Launch an interactive shell in the Singularity container via Slurm scheduler (on tticslurm)**
-```
+# Launch an interactive shell in the Singularity container via Slurm scheduler (on tticslurm)
 $ lmn run tticslurm -- bash
-```
 
-**Run a job in the Singularity container via Slurm scheduler (on tticslurm**)
-```
+# Run a job in the Singularity container via Slurm scheduler (on tticslurm)
 $ lmn run tticslurm -- python train.py
-```
 
-**Submit a batch job that runs in the Singularity container via Slurm scheduler (on tticslurm**)
-```
+# Submit a batch job that runs in the Singularity container via Slurm scheduler (on tticslurm)
 $ lmn run tticslurm -d -- python train.py
+
+# Launching a sweep (batch jobs) that runs in the Singularity container via Slurm scheduler (on tticslurm)
+# This submits 10 batch jobs where `$LMN_RUN_SWEEP_IDX` is set from 0 to 9.
+$ lmn run tticslurm --sweep 0-10 -d -- python train.py -l '$LMN_RUN_SWEEP_IDX'
+
+# Run a script on the login node (on tticslurm)
+$ lmn run tticslurm --mode ssh -- squeue -u takuma
 ```
 
-**Launching a sweep (batch jobs) that runs in the Singularity container via Slurm scheduler (on tticslurm)**
-```
-$ lmn run tticslurm --sweep 0-10 -d -- python train.py -l '$LMN_RUN_SWEEP_IDX'
-```
-This submits 10 batch jobs where `$LMN_RUN_SWEEP_IDX` is set from 0 to 9.
 <details>
-<summary>More examples of `--sweep` format</summary>
+<summary>More about `--sweep` format</summary>
+    
 - `--sweep 0-10`: ten jobs with `LMN_RUN_SWEEP_IDX=0`, `1` through `9`
   - Internally `lmn` simply runs `range(0, 10)`
 - `--sweep 7`: a single job with `LMN_RUN_SWEEP_IDX=7`
 - `--sweep 3,5,8`:  three jobs with `LMN_RUN_SWEEP_IDX=3` and `5` and `8`
 </details>
-
-**Run a script on the login node**
-```
-$ lmn run tticslurm --mode ssh -- squeue -u takuma
-```
 
 <!-- # Paramiko fails in ssh-authentication?
 - Make sure you can ssh manually
