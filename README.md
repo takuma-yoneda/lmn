@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🍋 LMN - LaMbda functionality across servers for Noobs
+# 🍋 LMN - A minimal launcher
 <!-- <a href="https://github.com/takuma-yoneda/lmn/actions/workflows/python-publish-pypi.yml"> -->
 <!--     <img src="https://github.com/takuma-yoneda/lmn/actions/workflows/python-publish-pypi.yml/badge.svg" alt="Publish to PyPI" /> -->
 <!-- </a> -->
@@ -71,11 +71,11 @@ The config file looks like:
             "docker": {
                 "image": "ripl/my_transformer:latest",
                 "network": "host",
-            },
-            // Mount configurations (host -> container)
-            "mount_from_host": {
-                "/ripl/user/takuma/project/": "/project",
-                "/dev/shm": "/dev/shm",
+                // Mount configurations (host -> container)
+                "mount_from_host": {
+                    "/ripl/user/takuma/project/": "/project",
+                    "/dev/shm": "/dev/shm",
+                },
             },
             // Host-specific environment variables
             "environment": {
@@ -85,7 +85,7 @@ The config file looks like:
         "tticslurm": {
             "host": "slurm.ttic.edu",
             "user": "takuma",
-            "mode": "slurm-sing",
+            "mode": "slurm-sing",  // Running a Singularity container on a cluster with Slurm job scheduler
             "root_dir": "/share/data/ripl-takuma/lmn",
             // Slurm job configurations
             "slurm": {
@@ -100,10 +100,10 @@ The config file looks like:
             "singularity": {
                 "sif_file": "/share/data/ripl-takuma/singularity/my_transformer.sif",
                 "writable_tmpfs": true,
-                "startup": "ldconfig /.singularity.d/libs",  // Command to run at startup
-            },
-            "mount_from_host": {
-                "/share/data/ripl-takuma/project/": "/project",
+                "startup": "ldconfig /.singularity.d/libs",  // Command to run after starting up the container
+                "mount_from_host": {
+                    "/share/data/ripl-takuma/project/": "/project",
+                },
             },
             "environment": {
                 "PROJECT_DIR": "/project",
@@ -198,3 +198,9 @@ $ lmn run --help
   - ✅ supports X forwarding and more stuff that are helpful to run ROS applications on the container
   - ✅ provides more functionalities such as creating and deploying ssh keys on remote machines
   - 😢 does not support clusters with schedulers (Slurm or PBS), nor does it support Singularity
+
+
+# Tasks
+- [ ] Use Pydantic for configurations
+- [ ] add ssh-release subcommand (to drop the persistent ssh connection)
+- [ ] Remove project.name from the global config, and get project name from the project root directory name
