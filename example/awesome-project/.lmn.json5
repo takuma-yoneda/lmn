@@ -11,7 +11,7 @@
             "mode": "ssh",
             // A startup command to run
             "startup": "conda activate my_env",
-        }
+        },
 
         /* Use docker */
         "elm": {
@@ -40,12 +40,21 @@
             "host": "slurm.ttic.edu",
             "user": "takuma",
             // Rsync target directory (on the remote host)
-            "root_dir": "/share/data/ripl-takuma/lmn",
+            "root_dir": "/share/data/ripl/lmn",
             // Mode: ["ssh", "docker", "slurm", "pbs", "slurm-sing", "pbs-sing"]
-            "mode": "ssh",
+            "mode": "slurm",
             // A startup command to run
             "startup": "conda activate my_env",
-        }
+            // Slurm configuration
+            "slurm": {
+                "partition": "contrib-gpu",
+                "cpus_per_task": 1,
+                "time": "04:00:00",
+                "output": "slurm-%j.out.log",
+                "error": "slurm-%j.error.log",
+                "exclude": "gpu0,gpu18",
+            }
+        },
 
         /* Use Slurm scheduler with Singularity*/
         "tticslurm-sing": {
@@ -53,17 +62,26 @@
             "host": "slurm.ttic.edu",
             "user": "takuma",
             // Rsync target directory (on the remote host)
-            "root_dir": "/share/data/ripl-takuma/lmn",
+            "root_dir": "/share/data/ripl/lmn",
             // Mode: ["ssh", "docker", "slurm", "pbs", "slurm-sing", "pbs-sing"]
             "mode": "slurm-sing",
             // Singularity configurations
             "singularity": {
-                "sif_file": "/share/data/ripl-takuma/singularity/my_env.sif",  // Path on the remote host
+                "sif_file": "/share/data/ripl-takuma/singularity/my_transformer.sif",  // Path on the remote host
                 "writable_tmpfs": true,
                 "startup": "ldconfig /.singularity.d/libs",  // Command to run after starting up the container
                 "mount_from_host": {
                     "/share/data/ripl-takuma/project/": "/project",
                 }
+            },
+            // Slurm configuration
+            "slurm": {
+                "partition": "contrib-gpu",
+                "cpus_per_task": 1,
+                "time": "04:00:00",
+                "output": "slurm-%j.out.log",
+                "error": "slurm-%j.error.log",
+                "exclude": "gpu0,gpu18",
             }
         }
     }

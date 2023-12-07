@@ -249,35 +249,17 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
         docker_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
-        if not runtime_options.no_sync:
-            mounts = [Mount(target=docker_lmndirs.codedir, source=lmndirs.codedir, type='bind'),
-                      Mount(target=docker_lmndirs.outdir, source=lmndirs.outdir, type='bind'),
-                      Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind'),
-                      Mount(target=docker_lmndirs.scriptdir, source=lmndirs.scriptdir, type='bind')]
-        else:
-            mounts = []
-        mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
-
-        docker_runner = DockerRunner(client, docker_lmndirs)
-
-        # Docker-specific configurations
+        # Load Docker-specific configurations
         docker_pconf = machine.parsed_conf.get('docker', {})
         image = parsed.image or docker_pconf.get('image')
         user_id = docker_pconf.get('user_id', 0)
         group_id = docker_pconf.get('group_id', 0)
-
         network = docker_pconf.get('network', 'bridge')
 
         if startup:
             logger.warn('`startup` configurations outside of `docker` will be ignored in docker mode.')
             logger.warn('Please place `startup` under `docker` if you want to run it in the container.')
-
         container_startup = docker_pconf.get('startup', '')
-
-        if 'mount_from_host' in docker_pconf:
-            logger.error("`mount_from_host` cannot be under `docker` in the config files.")
-            logger.error("Please place it under `project`.")
-            import sys; sys.exit(1)
 
         if not isinstance(user_id, int):
             logger.error("Invalid config: user_id must be an integer")
@@ -290,6 +272,23 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         if image is None:
             logger.error("Invalid config: docker image is not specified.")
             import sys; sys.exit(1)
+
+        mounts = []
+        if not runtime_options.no_sync:
+            mounts += [Mount(target=docker_lmndirs.codedir, source=lmndirs.codedir, type='bind'),
+                       Mount(target=docker_lmndirs.outdir, source=lmndirs.outdir, type='bind'),
+                       Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind'),
+                       Mount(target=docker_lmndirs.scriptdir, source=lmndirs.scriptdir, type='bind')]
+
+        if 'mount_from_host' in docker_pconf:
+            mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in docker_pconf['mount_from_host'].items()]
+
+        if project.mount_from_host:
+            # Backward compatible
+            logger.warn("`mount_from_host` under `project` is deprecated. Please move it under `docker`.")
+            mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
+
+        docker_runner = DockerRunner(client, docker_lmndirs)
 
         print_conf(mode, machine, image)
         if runtime_options.sweep:
@@ -390,10 +389,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             if machine.parsed_conf is None or 'singularity' not in machine.parsed_conf:
                 raise ValueError('Entry "singularity" not found in the config file.')
 
-            image = machine.parsed_conf.get('singularity', {}).get('sif_file')
-            overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
-            writable_tmpfs = machine.parsed_conf.get('singularity', {}).get('writable_tmpfs', False)
-            container_startup = machine.parsed_conf.get('singularity', {}).get('startup', '')
+            sing_conf = machine.parsed_conf.get('singularity', {})
+            image = sing_conf.get('sif_file')
+            overlay = sing_conf.get('overlay')
+            writable_tmpfs = sing_conf.get('writable_tmpfs', False)
+            container_startup = sing_conf.get('startup', '')
 
             # Overwrite lmn envvars.  Hmm I don't like this...
             from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
@@ -432,7 +432,14 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                             bind.format(target=sing_lmndirs.outdir, source=lmndirs.outdir),
                             bind.format(target=sing_lmndirs.mountdir, source=lmndirs.mountdir),
                             bind.format(target=sing_lmndirs.scriptdir, source=lmndirs.scriptdir)]
-            options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
+
+            if 'mount_from_host' in sing_conf:
+                options += [bind.format(target=tgt, source=src) for src, tgt in sing_conf['mount_from_host'].items()]
+
+            if project.mount_from_host:
+                # Backward compatible
+                logger.warn("`mount_from_host` under `project` is deprecated. Please move it under `singularity`.")
+                options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
 
             # Overlay
             if overlay:
@@ -688,10 +695,6 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                         env=env,
                         env_from_host=env_from_host,
                         dry_run=run_opt.dry_run)
-
-
-
-
 
     else:
         raise ValueError(f'Unrecognized mode: {mode}')

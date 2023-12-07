@@ -95,7 +95,7 @@ def load_config(machine_name: str):
     if machine_name not in config['machines']:
         raise KeyError(
             f'Machine "{machine_name}" not found in the configuration. '
-            f'Available machines are: {" ".join(config["machines"].keys())}'
+            f'Available machines are: {", ".join(config["machines"].keys())}'
         )
 
     pconf = config.get('project', {})
@@ -148,9 +148,13 @@ def load_config(machine_name: str):
     user, host = mconf['user'], mconf['host']
     remote_conf = RemoteConfig(user, host)
 
+    if 'root_dir' in mconf:
+        lmndir = f"{mconf['root_dir']}/{remote_conf.user}"
+    else:
+        lmndir = f'{REMOTE_ROOT_DIR}/{remote_conf.user}/lmn'
     machine = Machine(remote_conf,
                       parsed_conf=mconf,
-                      lmndir=mconf.get('root_dir', f'{REMOTE_ROOT_DIR}/{remote_conf.user}/lmn'),
+                      lmndir=lmndir,
                       env=mconf.get('environment', {}))
 
     return project, machine, preset_conf
