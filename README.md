@@ -187,12 +187,13 @@ $ lmn run --help
   - add `umask 002` in your `~/.bashrc` to allow group write permission as default -->
 
 # Comparison with other packages
-`lmn` is inspired by two great packages: [geyang/jaynes](https://github.com/geyang/jaynes) and [afdaniele/cpk](https://github.com/afdaniele/cpk).
-- `jaynes` focuses on launching a lot of jobs in detached (non-interactive) mode
-  - ✅ supports ssh, docker, slurm and AWS / GCP (but not PBS)
-  - 😢 does not support Singularity
-  - 😢 can only launch non-interactive jobs, and also is limited to Python projects
+`lmn` is inspired by the following great packages: [geyang/jaynes](https://github.com/geyang/jaynes), [justinjfu/doodad](https://github.com/justinjfu/doodad) and [afdaniele/cpk](https://github.com/afdaniele/cpk).
+- `jaynes` and `doodad` focus on launching a lot of jobs in non-interactive mode
+  - ✅ support ssh, docker, slurm and AWS / GCP (but not PBS scheduler)
+  - 😢 do not support Singularity
+  - 😢 cannot launch interactive jobs
+  - 😢 only work with Python project, and require (although small) modifications to the project codebase
 - `cpk` focuses on (though not limited to) ROS application and running programs in docker containers
   - ✅ supports X forwarding and more stuff that are helpful to run ROS applications on the container
   - ✅ provides more functionalities such as creating and deploying ssh keys on remote machines
-  - 😢 does not support clusters with schedulers (Slurm or PBS), and does not support Singularity
+  - 😢 does not support clusters with schedulers (Slurm or PBS), nor does it support Singularity
