@@ -6,10 +6,7 @@ lmn looks for a configuration file in this order:
 2. `$HOME/.lmn.json5`
 3. `$HOME/.config/lmn`
 
-NOTE: project root is determined by checking if a directory contains `.git` or `.lmn.json5`. If those are not found in the current directory, lmn recursively traverses its parents to search for it.
-And if they are now found in any ancestor directories, lmn assumes the current directory to be the project root.
+2 and 3 are considered *global* configuration. The local configuration has priority to the global one.
 
-## Local configuration
-lmn looks for `{project_root}/.lmn.json5`.  
-Local and global configurations are merged. Local configuration has a priority.
-
+> Project root is determined by checking if a directory contains `.git` or `.lmn.json5`.  
+> If those are not found in the current directory, `lmn` recursively traverses its parents to search for it.
