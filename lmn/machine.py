@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import os
 from os.path import expandvars
+from subprocess import CompletedProcess
 from lmn.helpers import posixpath2str, replace_lmn_envvars
+from typing import Optional
 import invoke
 
 from lmn import logger
@@ -60,9 +62,13 @@ class CLISSHClient:
     def uri(self, path):
         return f'{self.remote_conf.base_uri}:{path}'
 
-    def run(self, cmd, directory="$HOME", disown=False, hide=False, env=None, pty=False, dry_run=False):
+    def run(self, cmd, directory="$HOME", env=None, capture_output: bool = False, dry_run: bool = False) -> Optional[str]:
         from lmn.cli._utils import run_cmd2
         import re
+        """
+        Args:
+            - capture_output (bool): If True, the returned object will contain stdout/stderr, **but the process won't be interactive**
+        """
         # TODO: remove `env`: handle that within `cmd`!
         # TODO: Support disown (if that is necessary for sweep)
         env = {} if env is None else env
@@ -87,17 +93,17 @@ class CLISSHClient:
         remote_cmds += [cmd]
 
         ssh_cmd = f"{ssh_base_cmd} '{' && '.join(remote_cmds)}'"
-        result = run_cmd2(ssh_cmd)
+        result = run_cmd2(ssh_cmd, get_output=capture_output)
         return result
 
-    def put(self, fpath, target_path=None):
+    def put(self, fpath, target_path=None) -> None:
         from lmn.cli._utils import run_cmd2
         # TODO: Move the ControlPath to global config
         options = [f'-o ControlPath=$HOME/.ssh/lmn-ssh-socket-{self.remote_conf.host}']
         options = [os.path.expandvars(opt) for opt in options]
         cmd = ['scp', *options, fpath, f'{self.remote_conf.base_uri}:{target_path}']
-        result = run_cmd2(cmd, shell=False)  # Setting shell=False to get the return code
-        return result
+        # Setting get_output=True has a side-effect of not showing stdout on the terminal
+        run_cmd2(cmd, shell=False, get_output=True)
 
     def port_forward(self):
         raise NotImplementedError

@@ -52,8 +52,7 @@ class SSHRunner:
         lmnenv = get_lmnenvs(cmd, self.lmndirs)
         allenv = {**env, **lmnenv}
         allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
-        return self.client.run(cmd, directory=(self.lmndirs.codedir / relative_workdir),
-                               disown=disown, env=allenv, dry_run=dry_run, pty=True)
+        return self.client.run(cmd, directory=(self.lmndirs.codedir / relative_workdir), env=allenv, dry_run=dry_run)
 
 
 class DockerRunner:
@@ -202,6 +201,10 @@ class SlurmRunner:
              env_from_host: List[str] = [],
              startup: str = "", timestamp: str = "", num_sequence: int = 1,
              interactive: bool = None, dry_run: bool = False):
+        """
+        Args:
+            - env_from_host (List[str]): Used for Singularity, inherit specified envvars from host
+        """
         from simple_slurm_command import SlurmCommand
         env = {} if env is None else env
 
@@ -278,7 +281,13 @@ class SlurmRunner:
         else:
             cmd = '\n'.join([f'sbatch {script_fpath}'] * num_sequence)
 
-        self.client.run(cmd, directory=workdir, disown=False, dry_run=dry_run)
+        try:
+            self.client.run(cmd, directory=workdir, dry_run=dry_run)
+        except RuntimeError as e:
+            # NOTE: hide error as the exception is also raised when the command in the container returns non-zero exit value.
+            import traceback
+            logger.debug(f'self.client.run(...) failed!!:\n{str(e)}')
+            logger.debug(traceback.format_exc())
 
 
 class PBSRunner:
@@ -344,4 +353,11 @@ class PBSRunner:
             cmd = '\n'.join([f'qsub {script_fpath}'] * num_sequence)
 
         logger.debug(f'submission command: {cmd}')
-        self.client.run(cmd, directory=workdir, disown=False, dry_run=dry_run)
+
+        try:
+            self.client.run(cmd, directory=workdir, dry_run=dry_run)
+        except RuntimeError as e:
+            # NOTE: hide error as the exception is also raised when the command in the container returns non-zero exit value.
+            import traceback
+            logger.debug(f'self.client.run(...) failed!!:\n{str(e)}')
+            logger.debug(traceback.format_exc())

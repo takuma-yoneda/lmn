@@ -3,7 +3,7 @@ from argparse import ArgumentParser, Namespace
 from lmn import logger
 from lmn.cli._config_loader import Machine, Project
 from lmn.cli._utils import rsync
-from lmn.machine import SimpleSSHClient
+from lmn.machine import CLISSHClient
 
 RSYNC_DESTINATION_PATH = "/tmp/".rstrip('/')
 
@@ -53,16 +53,16 @@ def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
         try:
             lmndirs = machine.get_lmndirs(project.name)
             # Check if there's any output file (the first line is always 'total [num-files]')
-            ssh_client = SimpleSSHClient(machine.remote_conf)
+            ssh_client = CLISSHClient(machine.remote_conf)
 
-            result = ssh_client.run(f'ls -l {lmndirs.outdir} | grep -v "^total" | wc -l', hide=True)
-            num_output_files = int(result.stdout)
+            result = ssh_client.run(f'ls -l {lmndirs.outdir} | grep -v "^total" | wc -l', capture_output=True)
+            num_output_files = int(result)
 
-            msg = f'{num_output_files} files are in the output directory'
-            logger.info(msg)
+            logger.info(f'{num_output_files} files are in the output directory')
             if num_output_files > 0:
-                rsync(source_dir=machine.uri(lmndirs.outdir), target_dir=project.outdir,
-                      dry_run=dry_run)
+                rsync(source_dir=lmndirs.outdir, target_dir=project.outdir, 
+                      remote_conf=machine.remote_conf,
+                      dry_run=dry_run, to_local=True)
                 logger.info(f'The output files are copied to {str(project.outdir)}')
 
         except OSError:

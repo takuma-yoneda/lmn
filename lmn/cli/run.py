@@ -697,7 +697,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         raise ValueError(f'Unrecognized mode: {mode}')
 
     # Sync output files
-    if not runtime_options.no_sync:
+    if not runtime_options.no_sync and not runtime_options.disown:
         _sync_output(project, machine, dry_run=parsed.dry_run)
 
 name = 'run'

@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_conf: RemoteConfig, options: Optional[List[str]] = None,
-          exclude: Optional[List[str]] = None, dry_run: bool = False, transfer_rootdir: bool = True):
+          exclude: Optional[List[str]] = None, dry_run: bool = False, transfer_rootdir: bool = True, to_local: bool = False):
     """
     source_dir: hoge/fuga/source-dir/content-files
     target_dir: Hoge/Fuga/target-dir
@@ -21,9 +21,6 @@ def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_con
     else:
       target_dir: Hoge/Fuga/target-dir/content-files
     """
-    # TODO: replace with https://github.com/laktak/rsyncy (?)
-    # ^ This one supports visualizing progress bar
-
     import shutil
     exclude = [] if exclude is None else exclude
     options = [] if options is None else options
@@ -41,16 +38,15 @@ def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_con
     options += ['--archive', '--compress']
     options += [f'--exclude \'{ex}\'' for ex in exclude]
     options_str = ' '.join(options)
-    cmd = f"rsync {options_str} {source_dir} {remote_conf.base_uri}:{target_dir}"
+    if to_local:
+        cmd = f"rsync {options_str} {remote_conf.base_uri}:{source_dir} {target_dir}"
+    else:
+        cmd = f"rsync {options_str} {source_dir} {remote_conf.base_uri}:{target_dir}"
     logger.debug(f'running command: {cmd}')
 
     if not dry_run:
-        out = run_cmd(cmd, shell=True)
+        run_cmd2(cmd, shell=True)
         logger.info("Sync finished!")
-
-        if out.returncode != 0:
-            raise OSError(f'The following rsync command failed:\n{out.args}\n\n{out.stderr.decode("utf-8")}')
-        return out
 
 
 def run_cmd(cmd, get_output=False, shell=False) -> subprocess.CompletedProcess:
@@ -72,16 +68,28 @@ def run_cmd(cmd, get_output=False, shell=False) -> subprocess.CompletedProcess:
         return res
 
 
-def run_cmd2(cmd, shell: bool = True, raise_on_error: bool = False):
+def run_cmd2(cmd, get_output: bool = False, shell: bool = True, ignore_error: bool = False) -> Optional[str]:
+    # TODO: 
+    # - Do we ever need shell = False ??
+    # - Do we ever need ignore_error = True ??
+    # What is the downside of using get_output = True ??
+    # - I guess you can't interact with the process with get_output = True.
+
     subprocess_env = dict(os.environ)
     logger.debug(f'running command: {cmd}')
+    if get_output:
+        result = subprocess.run(cmd, shell=shell, capture_output=True)
+        if result.returncode != 0 and not ignore_error:
+            stderr = result.stderr.read().decode('utf-8')
+            msg = f"The command {cmd} returned exit code {result.returncode}\n---\n{stderr}\n---"
+            raise RuntimeError(msg)
+        return result.stdout.decode('utf-8').rstrip()
+
     result = subprocess.run(cmd,
                             stdout=sys.stdout, stderr=sys.stderr,
                             env=subprocess_env,
                             shell=shell)
     # Check for errors
-    if raise_on_error and result.returncode != 0:
-        msg = "The command {} returned exit code {}".format(cmd, result.returncode)
+    if not ignore_error and result.returncode != 0:
+        msg = f"The command {cmd} returned exit code {result.returncode}"
         raise RuntimeError(msg)
-
-    return result
