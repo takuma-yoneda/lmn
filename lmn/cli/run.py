@@ -345,7 +345,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
     elif mode in ['slurm', 'slurm-sing', 'sing-slurm']:
         # Slurm specific configurations
-        from lmn.config import SlurmConfig
+        from lmn.scheduler.slurm import SlurmConfig
         import randomname
         import random
         if 'slurm' not in machine.parsed_conf:

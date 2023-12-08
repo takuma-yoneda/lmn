@@ -208,7 +208,7 @@ class SlurmRunner:
         Args:
             - env_from_host (List[str]): Used for Singularity, inherit specified envvars from host
         """
-        from simple_slurm_command import SlurmCommand
+        from lmn.scheduler.slurm import SlurmCommand
         env = {} if env is None else env
 
         # TODO: Verify env_from_list contains valid environment variable names
