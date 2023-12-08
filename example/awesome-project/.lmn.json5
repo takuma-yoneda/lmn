@@ -1,4 +1,8 @@
 {
+    "project": {
+        "name": "awesome_project",
+        "exclude": ["*.mp4"],  // Exclude files from rsync
+    },
     "machines": {
         /* Activate conda environment and run a script */
         "birch": {
@@ -16,7 +20,7 @@
         /* Use docker */
         "elm": {
             // Host information
-            "host": "birch.ttic.edu",
+            "host": "elm.ttic.edu",
             "user": "takuma",
             // Rsync target directory (on the remote host)
             "root_dir": "/scratch/takuma/lmn",
@@ -28,13 +32,13 @@
                 "network": "host",
                 // Mount configurations (host -> container)
                 "mount_from_host": {
-                    "/ripl/user/takuma/project/": "/project",
+                    "/ripl/data/lmn-example/project": "/project",
                     "/dev/shm": "/dev/shm",
                 },
             },
         },
 
-        /* Use Slurm scheduler */
+        /* Run a script in a conda environment with Slurm scheduler */
         "tticslurm": {
             // Host information
             "host": "slurm.ttic.edu",
@@ -67,11 +71,11 @@
             "mode": "slurm-sing",
             // Singularity configurations
             "singularity": {
-                "sif_file": "/share/data/ripl-takuma/singularity/my_transformer.sif",  // Path on the remote host
+                "sif_file": "/share/data/ripl/lmn-example/singularity/my_env.sif",  // Path on the remote host
                 "writable_tmpfs": true,
                 "startup": "ldconfig /.singularity.d/libs",  // Command to run after starting up the container
                 "mount_from_host": {
-                    "/share/data/ripl-takuma/project/": "/project",
+                    "/share/data/ripl/lmn-example/project": "/project",
                 }
             },
             // Slurm configuration

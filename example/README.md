@@ -3,10 +3,9 @@
 ## Global and local configurations
 `lmn` looks for configuration files in this order:
 1. `{project_root}/.lmn.json5`
-2. `$HOME/.lmn.json5`
-3. `$HOME/.config/lmn`
+2. `$HOME/.config/lmn`
 
-2 or 3 are considered *global* configuration. `lmn` merges local configuration with a global one (the local config has priority for conflicted entries).
+2 is considered *global* configuration. `lmn` merges local configuration with the global one (the local config has priority for conflicted entries).
 It is recommended to store basic configurations (e.g., remote machines) in the global config, and keep the local config light.
 
 ## Preset for slurm configurations
