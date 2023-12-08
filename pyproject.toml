@@ -16,7 +16,6 @@ dependencies = [
     "pyjson5",
     "python-dotenv",
     "python-on-whales>=0.53.0",
-    "rsyncy>=0.1.0",
 ]
 requires-python = ">=3.8"
 readme = "README.md"
