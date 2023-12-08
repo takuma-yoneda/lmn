@@ -247,7 +247,8 @@ class SlurmRunner:
         workdir = Path(self.lmndirs.codedir) / relative_workdir
 
         slurm_options = []
-        exports = [f'export {key}={val}' for key, val in allenv.items()]
+        import shlex
+        exports = [f'export {key}={shlex.quote(str(val))}' for key, val in allenv.items()]
 
         if env_from_host:
             # Only matters for Singularity
@@ -317,7 +318,8 @@ class PBSRunner:
         workdir = Path(self.lmndirs.codedir) / relative_workdir
 
         slurm_options = []
-        exports = [f'export {key}={val}' for key, val in allenv.items()]
+        import shlex
+        exports = [f'export {key}={shlex.quote(str(val))}' for key, val in allenv.items()]
 
         if env_from_host:
             # Only matters for Singularity
