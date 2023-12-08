@@ -237,8 +237,8 @@ class LaunchLogManager:
 from lmn.machine import RemoteConfig
 
 def establish_persistent_ssh(remote_conf: RemoteConfig):
-    from lmn.cli._utils import run_cmd2
+    from lmn.cli._utils import run_cmd
     # TODO: Move the ControlPath to global config
     # Reference: https://unix.stackexchange.com/a/50515/556831
     options = f'-nNf -o ControlMaster=auto -o ControlPath=~/.ssh/lmn-ssh-socket-{remote_conf.host}'
-    run_cmd2(f'ssh {options} {remote_conf.base_uri}', shell=True)
+    run_cmd(f'ssh {options} {remote_conf.base_uri}', shell=True)

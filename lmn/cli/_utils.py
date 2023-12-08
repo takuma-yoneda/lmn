@@ -45,30 +45,11 @@ def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_con
     logger.debug(f'running command: {cmd}')
 
     if not dry_run:
-        run_cmd2(cmd, shell=True)
+        run_cmd(cmd, shell=True)
         logger.info("Sync finished!")
 
 
-def run_cmd(cmd, get_output=False, shell=False) -> subprocess.CompletedProcess:
-
-    if shell and isinstance(cmd, (list, tuple)):
-        cmd = " ".join([str(s) for s in cmd])
-
-    if get_output:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=shell)
-        proc.wait()
-        if proc.returncode != 0:
-            msg = "The command {} returned exit code {}".format(cmd, proc.returncode)
-            raise RuntimeError(msg)
-        out = proc.stdout.read().decode("utf-8").rstrip()
-        logger.info(out)
-        return out
-    else:
-        res = subprocess.run(cmd, shell=shell, capture_output=True)
-        return res
-
-
-def run_cmd2(cmd, get_output: bool = False, shell: bool = True, ignore_error: bool = False) -> Optional[str]:
+def run_cmd(cmd, get_output: bool = False, shell: bool = True, ignore_error: bool = False) -> Optional[str]:
     # TODO: 
     # - Do we ever need shell = False ??
     # - Do we ever need ignore_error = True ??

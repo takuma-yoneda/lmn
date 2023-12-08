@@ -63,7 +63,7 @@ class CLISSHClient:
         return f'{self.remote_conf.base_uri}:{path}'
 
     def run(self, cmd, directory="$HOME", env=None, capture_output: bool = False, dry_run: bool = False) -> Optional[str]:
-        from lmn.cli._utils import run_cmd2
+        from lmn.cli._utils import run_cmd
         import re
         """
         Args:
@@ -93,17 +93,17 @@ class CLISSHClient:
         remote_cmds += [cmd]
 
         ssh_cmd = f"{ssh_base_cmd} '{' && '.join(remote_cmds)}'"
-        result = run_cmd2(ssh_cmd, get_output=capture_output)
+        result = run_cmd(ssh_cmd, get_output=capture_output)
         return result
 
     def put(self, fpath, target_path=None) -> None:
-        from lmn.cli._utils import run_cmd2
+        from lmn.cli._utils import run_cmd
         # TODO: Move the ControlPath to global config
         options = [f'-o ControlPath=$HOME/.ssh/lmn-ssh-socket-{self.remote_conf.host}']
         options = [os.path.expandvars(opt) for opt in options]
         cmd = ['scp', *options, fpath, f'{self.remote_conf.base_uri}:{target_path}']
         # Setting get_output=True has a side-effect of not showing stdout on the terminal
-        run_cmd2(cmd, shell=False, get_output=True)
+        run_cmd(cmd, shell=False, get_output=True)
 
     def port_forward(self):
         raise NotImplementedError
