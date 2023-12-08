@@ -522,7 +522,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
     elif mode in ['pbs', 'pbs-sing', 'sing-pbs']:
         # PBS-specific configurations
-        from lmn.scheduler.pbs import PBSConfig, PBSCommand
+        from lmn.scheduler.pbs import PBSConfig
         import randomname
         import random
         if 'pbs' not in machine.parsed_conf:
