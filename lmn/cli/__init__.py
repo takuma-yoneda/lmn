@@ -7,8 +7,8 @@ import argparse
 
 
 def global_parser():
-    from . import run, sync, nv
-    commands = [run, sync, nv]
+    from . import brun, run, sync, nv
+    commands = [brun, run, sync, nv]
 
     parser = argparse.ArgumentParser()
     parser.add_argument(

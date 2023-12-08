@@ -38,8 +38,7 @@ class SSHRunner:
         self.client = client
         self.lmndirs = lmndirs
 
-    def exec(self, cmd: str, relative_workdir, env: dict | None = None, startup: str = "", dry_run: bool = False,
-             disown: bool = False):
+    def exec(self, cmd: str, relative_workdir, env: dict | None = None, startup: str = "", dry_run: bool = False):
         env = {} if env is None else env
         # if isinstance(cmd, list):
         #     cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
@@ -48,11 +47,15 @@ class SSHRunner:
             cmd = f'{startup} && {cmd}'
 
         logger.debug(f'ssh run with command: {cmd}')
-        logger.debug(f'cd to {self.lmndirs.codedir / relative_workdir}')
+        if relative_workdir is not None:
+            workdir = self.lmndirs.codedir / relative_workdir
+            logger.debug(f'cd to {workdir}')
+        else:
+            workdir = None
         lmnenv = get_lmnenvs(cmd, self.lmndirs)
         allenv = {**env, **lmnenv}
         allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
-        return self.client.run(cmd, directory=(self.lmndirs.codedir / relative_workdir), env=allenv, dry_run=dry_run)
+        return self.client.run(cmd, directory=workdir, env=allenv, dry_run=dry_run)
 
 
 class DockerRunner:
@@ -235,7 +238,8 @@ class SlurmRunner:
 
         if interactive and (s.output is not None):
             # User may expect stdout shown on the console.
-            logger.info('--output/--error argument for Slurm is ignored in interactive mode.')
+            # logger.info('--output/--error argument for Slurm is ignored in interactive mode.')
+            pass
 
         lmnenv = get_lmnenvs(cmd, self.lmndirs)
         allenv = {**env, **lmnenv}
