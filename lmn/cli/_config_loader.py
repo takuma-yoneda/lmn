@@ -21,7 +21,7 @@ REMOTE_ROOT_DIR = '/tmp'
 class Project:
     """Maintains the info specific to the local project"""
     def __init__(self, name, rootdir, outdir=None, exclude=None, startup: str = "", 
-                 mount_dirs: dict | None = None, mount_from_host: dict | None = None,
+                 mount_from_host: dict | None = None,
                  env: dict | None = None) -> None:
         self.name = name
         self.rootdir = Path(rootdir)
@@ -29,7 +29,6 @@ class Project:
         self.exclude = exclude
         self.startup = startup
         self.env = env if env is not None else {}
-        self.mount_dirs = mount_dirs if mount_dirs is not None else {}
         self.mount_from_host = mount_from_host if mount_from_host is not None else {}
 
         self._make_directories()
@@ -114,11 +113,8 @@ def load_config(machine_name: str):
     logger.info(f'Project name     : {name}')
     logger.info(f'Project directory: {proj_rootdir}')
 
-    mount_dirs = pconf.get('mount', [])
     mount_from_host = pconf.get('mount_from_host', {})
 
-    if 'mount' in mconf:
-        mount_dirs = mconf.get('mount', [])
     if 'mount_from_host' in mconf:
         mount_from_host = mconf.get('mount_from_host', {})
 
@@ -142,7 +138,6 @@ def load_config(machine_name: str):
                       exclude=pconf.get('exclude', []),
                       startup=pconf.get('startup', ""),
                       env={**project_env, **secret_env},
-                      mount_dirs=mount_dirs,
                       mount_from_host=mount_from_host)
 
     user, host = mconf['user'], mconf['host']

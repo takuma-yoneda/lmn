@@ -37,9 +37,9 @@ def _sync_code(project: Project, machine: Machine, dry_run: bool = False):
               exclude=project.exclude, options=rsync_options, dry_run=dry_run, transfer_rootdir=False)
 
         # rsync the directories to mount
-        for mount_dir in project.mount_dirs:
-            rsync(source_dir=mount_dir, target_dir=lmndirs.mountdir, remote_conf=machine.remote_conf,
-                  exclude=project.exclude, dry_run=dry_run)
+        # for mount_dir in project.mount_dirs:
+        #     rsync(source_dir=mount_dir, target_dir=lmndirs.mountdir, remote_conf=machine.remote_conf,
+        #           exclude=project.exclude, dry_run=dry_run)
     except OSError:
         import sys
         import traceback
