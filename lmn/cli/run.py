@@ -232,7 +232,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
     elif mode == 'docker':
         from docker import DockerClient
         from lmn.runner import DockerRunner
-        from lmn.config import DockerContainerConfig
+        from lmn.container.docker import DockerContainerConfig
+
+        if 'docker' not in machine.parsed_conf:
+            raise ValueError('Configuration must have an entry for "docker" to use docker mode.')
+
         base_url = "ssh://" + machine.base_uri
         # client = DockerClient(base_url=base_url, use_ssh_client=True)
         client = DockerClient(base_url=base_url)  # dockerpty hangs with use_ssh_client=True
@@ -250,47 +254,33 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         docker_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
         # Load Docker-specific configurations
-        docker_pconf = machine.parsed_conf.get('docker', {})
-        image = parsed.image or docker_pconf.get('image')
-        user_id = docker_pconf.get('user_id', 0)
-        group_id = docker_pconf.get('group_id', 0)
-        network = docker_pconf.get('network', 'bridge')
+        docker_pconf = DockerContainerConfig(**{
+            'name': name,
+            **machine.parsed_conf['docker']
+        })
 
         if startup:
             logger.warn('`startup` configurations outside of `docker` will be ignored in docker mode.')
             logger.warn('Please place `startup` under `docker` if you want to run it in the container.')
-        container_startup = docker_pconf.get('startup', '')
 
-        if not isinstance(user_id, int):
-            logger.error("Invalid config: user_id must be an integer")
-            import sys; sys.exit(1)
-
-        if not isinstance(group_id, int):
-            logger.error("Invalid config: group_id must be an integer")
-            import sys; sys.exit(1)
-
-        if image is None:
-            logger.error("Invalid config: docker image is not specified.")
-            import sys; sys.exit(1)
-
-        mounts = []
         if not runtime_options.no_sync:
-            mounts += [Mount(target=docker_lmndirs.codedir, source=lmndirs.codedir, type='bind'),
-                       Mount(target=docker_lmndirs.outdir, source=lmndirs.outdir, type='bind'),
-                       Mount(target=docker_lmndirs.mountdir, source=lmndirs.mountdir, type='bind'),
-                       Mount(target=docker_lmndirs.scriptdir, source=lmndirs.scriptdir, type='bind')]
-
-        if 'mount_from_host' in docker_pconf:
-            mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in docker_pconf['mount_from_host'].items()]
+            docker_pconf.mount_from_host.update({
+                f'{lmndirs.codedir}': docker_lmndirs.codedir,
+                f'{lmndirs.outdir}': docker_lmndirs.outdir,
+                f'{lmndirs.mountdir}': docker_lmndirs.mountdir,
+                f'{lmndirs.scriptdir}': docker_lmndirs.scriptdir,
+            })
 
         if project.mount_from_host:
             # Backward compatible
             logger.warn("`mount_from_host` under `project` is deprecated. Please move it under `docker`.")
-            mounts += [Mount(target=tgt, source=src, type='bind') for src, tgt in project.mount_from_host.items()]
+            docker_pconf.mount_from_host.update(project.mount_from_host)
+
+        docker_pconf.env.update(env)
 
         docker_runner = DockerRunner(client, docker_lmndirs)
 
-        print_conf(mode, machine, image)
+        print_conf(mode, machine, docker_pconf.image)
         if runtime_options.sweep:
             if not runtime_options.disown:
                 logger.error("You must set -d option to use sweep functionality.")
@@ -303,41 +293,21 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 _name = f'{name}-{sweep_idx}'
                 logger.info(f'Launching sweep {sweep_idx}: {_name}')
                 env.update({'LMN_RUN_SWEEP_IDX': sweep_idx})
-                docker_conf = DockerContainerConfig(
-                    image=image,
-                    name=_name,
-                    mounts=mounts,
-                    startup=container_startup,
-                    env=env,
-                    user_id=user_id,
-                    group_id=group_id,
-                    network=network,
-                )
+
+                dconf = deepcopy(docker_pconf)
+                dconf.name = _name
+                dconf.env.update(env)
+
                 docker_runner.exec(runtime_options.cmd,
                                    runtime_options.rel_workdir,
-                                   docker_conf,
-                                   # startup=startup,
+                                   dconf,
                                    interactive=False,
                                    kill_existing_container=runtime_options.force,
                                    quiet=not single_sweep)
-            # import time
-            # logger.warning('Sleeping for 5 seconds to see if the container fails...')
-            # logger.warning('You can safely exit anytime')
-            # time.sleep(10)
         else:
-            docker_conf = DockerContainerConfig(
-                image=image,
-                name=name,
-                mounts=mounts,
-                startup=container_startup,
-                env=env,
-                user_id=user_id,
-                group_id=group_id,
-                network=network,
-            )
             docker_runner.exec(runtime_options.cmd,
                                runtime_options.rel_workdir,
-                               docker_conf,
+                               docker_pconf,
                                # startup=startup,
                                interactive=not runtime_options.disown,
                                kill_existing_container=runtime_options.force)
@@ -356,22 +326,21 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         rand_num = random.randint(0, 100)
         job_name = f'lmn-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
 
-        # Parse from slurm config options (aside from default)
-        if parsed.sconf is not None:
+        # Create SlurmConfig object
+        if parsed.sconf is None:
+            sconf = machine.parsed_conf['slurm']
+        else:
+            # Try to load from the slurm conf presets
             logger.debug('parsed.sconf is specified. Loading custom preset conf.')
             sconf = preset.get('slurm-configs', {}).get(parsed.sconf, {})
-            if sconf is None:
-                raise KeyError(f'configuration: {parsed.sconf} cannot be found in "slurm-configs".')
-
-        else:
-            sconf = machine.parsed_conf['slurm']
-        slurm_conf = SlurmConfig(job_name, **sconf)
+            if not sconf:
+                raise KeyError(f'configuration: {parsed.sconf} cannot be found or is empty in "slurm-configs".')
+        slurm_conf = SlurmConfig(**{'job_name': job_name, **sconf})
+        logger.debug(f'Using slurm preset: {parsed.sconf}')
 
         if runtime_options.force:
             logger.warn("`-f / --force` option has no effect in slurm mode")
 
-        # logger.info(f'slurm_conf: {machine.sconf}')
-        # ssh_client = SimpleSSHClient(machine.remote_conf)
         ssh_client = CLISSHClient(machine.remote_conf)
         slurm_runner = SlurmRunner(ssh_client, lmndirs)
         run_opt = runtime_options
@@ -383,22 +352,21 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         slurm_conf.job_name = name
 
         if mode in ['slurm-sing', 'sing-slurm']:
-            # Decorate run_opt.cmd for Singularity
+            from lmn.container.singularity import SingularityConfig, SingularityCommand
 
-            # sconf = SlurmConfig(job_name, **mconf['slurm'])
+            # Error checking
             if machine.parsed_conf is None or 'singularity' not in machine.parsed_conf:
                 raise ValueError('Entry "singularity" not found in the config file.')
-
-            sing_conf = machine.parsed_conf.get('singularity', {})
-            image = sing_conf.get('sif_file')
-            overlay = sing_conf.get('overlay')
-            writable_tmpfs = sing_conf.get('writable_tmpfs', False)
-            container_startup = sing_conf.get('startup', '')
 
             # Overwrite lmn envvars.  Hmm I don't like this...
             from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
             sing_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
+            # Load singularity config
+            sing_conf = SingularityConfig(**{
+                "pwd": str(sing_lmndirs.codedir / runtime_options.rel_workdir),
+                **machine.parsed_conf['singularity']
+                })
             # TODO: Use get_lmndirs function!
             # TODO: Do we need this??
             env.update({
@@ -418,67 +386,35 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 'RMX_SCRIPT_DIR': sing_lmndirs.scriptdir,
             })
 
-            # NOTE: Without --containall, nvidia-smi command fails with "couldn't find libnvidia-ml.so library in your system."
-            # NOTE: Without bash -c '{cmd}', if you put PYTHONPATH=/foo/bar, it fails with no such file or directory 'PYTHONPATH=/foo/bar'
-            # TODO: Will the envvars be taken over to the internal shell (by this extra bash command)?
-            # sing_cmd = "singularity run --nv --containall {options} {sif_file} bash -c '{cmd}'"
-            sing_cmd = 'singularity run --nv --containall {options} {sif_file} bash -c -- "{cmd}"'
-            options = []
 
             # Bind
-            bind = '-B {source}:{target}'
+            mount_from_host = {}
             if not runtime_options.no_sync:
-                options += [bind.format(target=sing_lmndirs.codedir, source=lmndirs.codedir),
-                            bind.format(target=sing_lmndirs.outdir, source=lmndirs.outdir),
-                            bind.format(target=sing_lmndirs.mountdir, source=lmndirs.mountdir),
-                            bind.format(target=sing_lmndirs.scriptdir, source=lmndirs.scriptdir)]
-
-            if 'mount_from_host' in sing_conf:
-                options += [bind.format(target=tgt, source=src) for src, tgt in sing_conf['mount_from_host'].items()]
-
+                mount_from_host.update({
+                    f'{lmndirs.codedir}': sing_lmndirs.codedir,
+                    f'{lmndirs.outdir}': sing_lmndirs.outdir,
+                    f'{lmndirs.mountdir}': sing_lmndirs.mountdir,
+                    f'{lmndirs.scriptdir}': sing_lmndirs.scriptdir,
+                })
             if project.mount_from_host:
                 # Backward compatible
                 logger.warn("`mount_from_host` under `project` is deprecated. Please move it under `singularity`.")
-                options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
-
-            # Overlay
-            if overlay:
-                options += [f'--overlay {overlay}']
-
-            if writable_tmpfs:
-                # This often solves the following error:
-                # OSError: [Errno 30] Read-only file system
-                options += ['--writable-tmpfs']
-
-            # Environment variables
-            # TODO: Better to use --env-file option and read from a file
-            # Escaping quotes and commas will be much easier in that way.
-            options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
+                mount_from_host.update(project.mount_from_host)
 
             # NOTE: Since CUDA_VISIBLE_DEVICES is often comma-separated values (i.e., CUDA_VISIBLE_DEVICES=0,1),
             # and `singularity run --env FOO=BAR,HOGE=PIYO` considers comma to be a separator for envvars,
             # It fails without special handling.
-            env_from_host = ['CUDA_VISIBLE_DEVICES', 'SLURM_JOBID', 'SLURM_JOB_ID', 'SLURM_TASK_PID']
+            sing_conf.env_from_host += ['CUDA_VISIBLE_DEVICES', 'SLURM_JOBID', 'SLURM_JOB_ID', 'SLURM_TASK_PID']
 
-            # Workdir
-            _workdir = sing_lmndirs.codedir / runtime_options.rel_workdir
-            options += [f'--pwd {_workdir}']
+            # Integrate current `env`, `mount_from_host`
+            sing_conf.env.update(env)
+            sing_conf.mount_from_host.update(mount_from_host)
 
-            # Overwrite command
-            options = ' '.join(options)
-
-            if container_startup:
-                run_opt.cmd = f'{container_startup} && {run_opt.cmd}'
-
-            # Trying my best to escape quotations (https://stackoverflow.com/a/18886646/19913466)
-            logger.debug(f'run_opt.cmd before escape: {run_opt.cmd}')
-            escaped_cmd = run_opt.cmd.encode('unicode-escape').replace(b'"', b'\\"').decode('utf-8')
-            logger.debug(f'run_opt.cmd after escape: {escaped_cmd}')
-
-            run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=escaped_cmd)
+            # Finally overwrite run_opt.cmd
+            run_opt.cmd = SingularityCommand.run(run_opt.cmd, sing_conf)
 
         timestamp = f"{time.time():.5f}".split('.')[-1]  # 5 subdigits of the timestamp
-        print_conf(mode, machine, image=image if mode in ['slurm-sing', 'sing-slurm'] else None)
+        print_conf(mode, machine, image=sing_conf.sif_file if mode in ['slurm-sing', 'sing-slurm'] else None)
         if run_opt.sweep:
             if not run_opt.disown:
                 logger.error("You must set -d option to use sweep functionality.")
@@ -566,9 +502,6 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                 raise ValueError('Entry "singularity" not found in the config file.')
 
             image = machine.parsed_conf.get('singularity', {}).get('sif_file')
-            overlay = machine.parsed_conf.get('singularity', {}).get('overlay')
-            writable_tmpfs = machine.parsed_conf.get('singularity', {}).get('writable_tmpfs', False)
-            container_startup = machine.parsed_conf.get('singularity', {}).get('startup', '')
 
             # Overwrite lmn envvars.  Hmm I don't like this...
             from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
@@ -609,41 +542,14 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                             bind.format(target=sing_lmndirs.scriptdir, source=lmndirs.scriptdir)]
             options += [bind.format(target=tgt, source=src) for src, tgt in project.mount_from_host.items()]
 
-            # Overlay
-            if overlay:
-                options += [f'--overlay {overlay}']
-
-            if writable_tmpfs:
-                # This often solves the following error:
-                # OSError: [Errno 30] Read-only file system
-                options += ['--writable-tmpfs']
-
-            # Environment variables
-            # TODO: Better to use --env-file option and read from a file
-            # Escaping quotes and commas will be much easier in that way.
-            options += ['--env ' + ','.join(f'{key}="{val}"' for key, val in env.items())]
 
             # NOTE: Since CUDA_VISIBLE_DEVICES is often comma-separated values (i.e., CUDA_VISIBLE_DEVICES=0,1),
             # and `singularity run --env FOO=BAR,HOGE=PIYO` considers comma to be a separator for envvars,
             # It fails without special handling.
             env_from_host = ['CUDA_VISIBLE_DEVICES', 'JOBID', 'JOB_ID_STEP_ID', 'HOSTNAME', 'NODE_IDENTIFIER', 'TASK_IDENTIFIER']
 
-            # Workdir
-            _workdir = sing_lmndirs.codedir / runtime_options.rel_workdir
-            options += [f'--pwd {_workdir}']
-
-            # Overwrite command
-            options = ' '.join(options)
-
-            if container_startup:
-                run_opt.cmd = f'{container_startup} && {run_opt.cmd}'
-
-            # Trying my best to escape quotations (https://stackoverflow.com/a/18886646/19913466)
-            logger.debug(f'run_opt.cmd before escape: {run_opt.cmd}')
-            escaped_cmd = run_opt.cmd.encode('unicode-escape').replace(b'"', b'\\"').decode('utf-8')
-            logger.debug(f'run_opt.cmd after escape: {escaped_cmd}')
-
-            run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=escaped_cmd)
+            # run_opt.cmd = sing_cmd.format(options=options, sif_file=image, cmd=escaped_cmd)
+            run_opt.cmd = SingularityCommand.run(cmd, sing_conf)
 
         timestamp = f"{time.time():.5f}".split('.')[-1]  # 5 subdigits of the timestamp
         print_conf(mode, machine, image=image if mode in ['pbs-sing', 'sing-pbs'] else None)

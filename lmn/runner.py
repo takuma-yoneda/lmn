@@ -5,13 +5,13 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, List, Optional
 from tempfile import NamedTemporaryFile
-from docker import DockerClient
 from lmn import logger
 from lmn.helpers import replace_lmn_envvars
 
 
 if TYPE_CHECKING:
     from argparse import Namespace
+    from docker import DockerClient
     from lmn.machine import SimpleSSHClient, CLISSHClient
     from lmn.config import DockerContainerConfig
     from lmn.scheduler.pbs import PBSConfig
@@ -81,14 +81,13 @@ class DockerRunner:
         allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
 
         # NOTE: target: container, source: remote host
-        logger.debug(f'mounts: {docker_conf.mounts}')
+        logger.debug(f'mounts: {docker_conf.mount_from_host}')
         logger.debug(f'docker_conf: {docker_conf}')
 
         logger.debug(f'container codedir: {str(self.lmndirs.codedir / relative_workdir)}')
 
         if kill_existing_container:
             from docker.errors import NotFound
-            import docker
             try:
                 container = self.client.containers.get(docker_conf.name)
             except NotFound:
@@ -115,26 +114,26 @@ class DockerRunner:
 
         if docker_conf.startup:
             cmd = ' && '.join((docker_conf.startup, cmd))
-        cmd = f'{cmd} && chmod -R a+rw {str(self.lmndirs.outdir)}'
+        cmd = f'{cmd} && chmod -R a+r {str(self.lmndirs.outdir)}'
+
+        assert d.tty
+
+        # Use python-on-whales (i.e., docker cli)
+        import python_on_whales
+        whale_client = python_on_whales.DockerClient(host=f'ssh://{self.client.api._custom_adapter.ssh_host}')
+        logger.debug(f'docker run with command: {cmd}')
 
         if interactive:
-            assert d.tty
-
-            # Use python-on-whales (i.e., docker cli)
-            import python_on_whales
-            whale_client = python_on_whales.DockerClient(host=f'ssh://{self.client.api._custom_adapter.ssh_host}')
-            logger.debug(f'docker run with command: {cmd}')
-
             try:
                 whale_client.run(
                     d.image,
                     ['/bin/bash', '-c', cmd],
                     detach=False,
                     envs=allenv,
-                    gpus='all',
-                    interactive=True,
+                    gpus=d.gpus,
+                    interactive=interactive,
                     ipc=d.ipc_mode,
-                    mounts=[('type=bind', f'source={m["Source"]}', f'destination={m["Target"]}') for m in d.mounts],
+                    mounts=[('type=bind', f'source={src}', f'destination={tgt}') for src, tgt in d.mount_from_host.items()],
                     name=d.name,
                     networks=[d.network],
                     remove=True,
@@ -149,22 +148,32 @@ class DockerRunner:
                 logger.debug(traceback.format_exc())
 
         else:
+            # NOTE:
+            # Ideally, I'd like to use python-on-whales for non-interactive mode as well,
+            # but somehow its detached mode runs very slowly...
+
+            # Handle mount here
+            from docker.types import Mount
+            from lmn.container.docker import get_gpu_device
+            mounts = [Mount(target=tgt, source=src, type='bind') for src, tgt in docker_conf.mount_from_host.items()]
+
             cmd = f'/bin/bash -c \'{cmd}\''
-            container = self.client.containers.run(d.image,
-                                                   cmd,
-                                                   name=d.name,
-                                                   remove=d.remove,  # Keep it running as we need to change
-                                                   network=d.network,
-                                                   ipc_mode=d.ipc_mode,
-                                                   detach=True,
-                                                   tty=(not log_stderr_background),  # If True, stdout/stderr are mixed, but I observed sometimes some stdout are not showing up when tty=False
-                                                   stdin_open=True,  # It's useful to keep it open, as you may manually attach the container later
-                                                   mounts=d.mounts,
-                                                   environment=allenv,
-                                                   device_requests=d.device_requests,
-                                                   working_dir=str(self.lmndirs.codedir / relative_workdir),
-                                                   user=f'{d.user_id}:{d.group_id}',
-                                                   )
+            container = self.client.containers.run(
+                d.image,
+                cmd,
+                name=d.name,
+                remove=d.remove,  # Keep it running as we need to change
+                network=d.network,
+                ipc_mode=d.ipc_mode,
+                detach=True,
+                tty=(not log_stderr_background),  # If True, stdout/stderr are mixed, but I observed sometimes some stdout are not showing up when tty=False
+                stdin_open=True,  # It's useful to keep it open, as you may manually attach the container later
+                mounts=mounts,
+                environment=allenv,
+                device_requests=[get_gpu_device()],
+                working_dir=str(self.lmndirs.codedir / relative_workdir),
+                user=f'{d.user_id}:{d.group_id}',
+            )
             logger.debug(f'container: {container}')
 
             def log_stream(stream: Iterable):

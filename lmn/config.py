@@ -4,6 +4,8 @@ import os
 from os.path import expandvars
 import docker
 from lmn import logger
+from typing import Optional, List
+from pydantic import BaseModel, Field
 
 class DockerContainerConfig:
     def __init__(self, image, name, env: dict | None = None, remove=True, network='bridge', ipc_mode='private', mounts=None,
