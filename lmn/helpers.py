@@ -75,9 +75,8 @@ def parse_config(project_root):
         with open(path, 'r') as f:
             global_conf = json.load(f)
     else:
-        logger.error('lmn global config file cannot be located. Please place the config file at ~/.config/lmn.json5')
+        logger.warn('lmn global config file cannot be found. You may place the global config file at ~/.config/lmn.json5')
         global_conf = {}
-        exit(1)
 
     # Loop over possible local config file names
     for local_conf_fname in local_config_fnames:
