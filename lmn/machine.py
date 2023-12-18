@@ -19,7 +19,7 @@ class RemoteConfig:
     """
 
     from fabric import Connection
-    def __init__(self, user, host, port=22, slurm_node=False) -> None:
+    def __init__(self, user, host, port=22) -> None:
         self.user = user
         self.host = host
         self._conn = None
@@ -37,9 +37,9 @@ class RemoteConfig:
         conn = Connection(host=self.host, config=config, inline_ssh_env=True)
         conn.client.load_system_host_keys()
 
-        if self.auth_interactive_dumb:
-            from lmn.helper.ssh import overwrite_auth_fn
-            conn.client = overwrite_auth_fn(conn.client)
+        # if self.auth_interactive_dumb:
+        #     from lmn.helper.ssh import overwrite_auth_fn
+        #     conn.client = overwrite_auth_fn(conn.client)
 
         self._conn = conn
         return conn
@@ -57,7 +57,7 @@ class CLISSHClient:
     """Use the native CLI to run ssh"""
     def __init__(self, remote_conf: RemoteConfig) -> None:
         self.remote_conf = remote_conf
-        self.conn = self.remote_conf.get_connection()
+        # self.conn = self.remote_conf.get_connection()
 
     def uri(self, path):
         return f'{self.remote_conf.base_uri}:{path}'

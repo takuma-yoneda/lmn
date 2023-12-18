@@ -12,8 +12,8 @@ from lmn.helpers import replace_lmn_envvars
 if TYPE_CHECKING:
     from argparse import Namespace
     from docker import DockerClient
-    from lmn.machine import SimpleSSHClient, CLISSHClient
-    from lmn.config import DockerContainerConfig
+    from lmn.machine import CLISSHClient
+    from lmn.container.docker import DockerContainerConfig
     from lmn.scheduler.pbs import PBSConfig
 
 
@@ -205,7 +205,7 @@ class SlurmRunner:
     If your local machine has slurm (i.e., you're on slurm login-node), I guess you don't need this tool.
     Thus SlurmMachine inherits SSHMachine.
     """
-    def __init__(self, client: SimpleSSHClient, lmndirs: Namespace) -> None:
+    def __init__(self, client: CLISSHClient, lmndirs: Namespace) -> None:
         self.client = client
         self.lmndirs = lmndirs
 
