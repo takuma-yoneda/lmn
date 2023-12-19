@@ -3,7 +3,7 @@
 ## Global and local configurations
 `lmn` looks for configuration files in this order:
 1. `{project_root}/.lmn.json5`
-2. `$HOME/.config/lmn`
+2. `$HOME/.config/lmn.json5`
 
 2 is considered *global* configuration. `lmn` merges local configuration with the global one (the local config has priority for conflicted entries).
 It is recommended to store basic configurations (e.g., remote machines) in the global config, and keep the local config light.
