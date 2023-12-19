@@ -128,7 +128,10 @@ $ lmn run elm -- python train.py
 # Run a script on the host (on elm):
 $ lmn run elm --mode ssh -- python hello.py
 
-# Check GPU usage on elm (This is equivalent to `lmn run elm --mode ssh -- nvidia-smi`)
+# Run a script quickly on the host without syncing any files ("bare"-run; on elm)
+$ lmn brun elm -- hostname
+
+# Check GPU usage on elm (This is equivalent to `lmn brun elm -- nvidia-smi`)
 $ lmn nv elm
 
 # Launch an interactive shell in the Singularity container via Slurm scheduler (on tticslurm)
