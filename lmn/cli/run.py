@@ -212,7 +212,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
     startup = ' && '.join([e for e in [project.startup, machine.startup] if e.strip()])
 
     # If parsed.mode is not set, try to read from the config file.
-    mode = parsed.mode or machine.parsed_conf.get('mode')
+    mode = parsed.mode or machine.parsed_conf.mode
     if mode is None:
         logger.warning('mode is not set. Setting it to SSH mode')
         mode = 'ssh'
@@ -234,7 +234,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         from lmn.runner import DockerRunner
         from lmn.container.docker import DockerContainerConfig
 
-        if 'docker' not in machine.parsed_conf:
+        # if 'docker' not in machine.parsed_conf:
+        if machine.parsed_conf.docker is None:
             raise ValueError('Configuration must have an entry for "docker" to use docker mode.')
 
         base_url = "ssh://" + machine.base_uri
@@ -254,10 +255,12 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         docker_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
         # Load Docker-specific configurations
-        docker_pconf = DockerContainerConfig(**{
-            'name': name,
-            **machine.parsed_conf['docker']
-        })
+        # docker_pconf = DockerContainerConfig(**{
+        #     'name': name,
+        #     **machine.parsed_conf['docker']
+        # })
+        docker_pconf = machine.parsed_conf.docker
+        docker_pconf.name = name
 
         if startup:
             logger.warn('`startup` configurations outside of `docker` will be ignored in docker mode.')
@@ -318,7 +321,8 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         from lmn.scheduler.slurm import SlurmConfig
         import randomname
         import random
-        if 'slurm' not in machine.parsed_conf:
+        # if 'slurm' not in machine.parsed_conf:
+        if machine.parsed_conf.slurm is None:
             raise ValueError('Configuration must have an entry for "slurm" to use slurm mode.')
 
         # NOTE: slurm seems to be fine with duplicated name.
@@ -328,14 +332,19 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
         # Create SlurmConfig object
         if parsed.sconf is None:
-            sconf = machine.parsed_conf['slurm']
+            slurm_conf = machine.parsed_conf.slurm
         else:
             # Try to load from the slurm conf presets
             logger.debug('parsed.sconf is specified. Loading custom preset conf.')
-            sconf = preset.get('slurm-configs', {}).get(parsed.sconf, {})
-            if not sconf:
-                raise KeyError(f'configuration: {parsed.sconf} cannot be found or is empty in "slurm-configs".')
-        slurm_conf = SlurmConfig(**{'job_name': job_name, **sconf})
+            _sconf = preset.get('slurm-configs', {}).get(parsed.sconf, {})
+            if not _sconf:
+                logger.error(f'slurm config preset: "{parsed.sconf}" cannot be found in "slurm-configs" or is empty.')
+                import sys; sys.exit(1)
+            slurm_conf = SlurmConfig(**_sconf)
+
+        # Overwrite job name
+        # slurm_conf = SlurmConfig(**{'job_name': job_name, **sconf})
+        slurm_conf.job_name = job_name
         logger.debug(f'Using slurm preset: {parsed.sconf}')
 
         if runtime_options.force:
@@ -355,18 +364,22 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             from lmn.container.singularity import SingularityConfig, SingularityCommand
 
             # Error checking
-            if machine.parsed_conf is None or 'singularity' not in machine.parsed_conf:
+            # if machine.parsed_conf is None or 'singularity' not in machine.parsed_conf:
+            if machine.parsed_conf.singularity is None:
                 raise ValueError('Entry "singularity" not found in the config file.')
 
             # Overwrite lmn envvars.  Hmm I don't like this...
             from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
             sing_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
+            # Update `pwd` entry
+            sing_conf = machine.parsed_conf.singularity
+            sing_conf.pwd = str(sing_lmndirs.codedir / runtime_options.rel_workdir)
             # Load singularity config
-            sing_conf = SingularityConfig(**{
-                "pwd": str(sing_lmndirs.codedir / runtime_options.rel_workdir),
-                **machine.parsed_conf['singularity']
-                })
+            # sing_conf = SingularityConfig(**{
+            #     "pwd": str(sing_lmndirs.codedir / runtime_options.rel_workdir),
+            #     **machine.parsed_conf['singularity']
+            #     })
             # TODO: Use get_lmndirs function!
             # TODO: Do we need this??
             env.update({

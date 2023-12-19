@@ -17,8 +17,6 @@ class RemoteConfig:
     """Represents a configuration to connect to a remote server.
     This is used by SimpleSSHClient.
     """
-
-    from fabric import Connection
     def __init__(self, user, host, port=22) -> None:
         self.user = user
         self.host = host
@@ -29,20 +27,21 @@ class RemoteConfig:
     def base_uri(self) -> str:
         return f'{self.user}@{self.host}'
 
-    def get_connection(self) -> Connection:
-        from fabric import Connection
-        from fabric.config import Config
-        config = Config()
-        config.user = self.user
-        conn = Connection(host=self.host, config=config, inline_ssh_env=True)
-        conn.client.load_system_host_keys()
+    # from fabric import Connection
+    # def get_connection(self) -> Connection:
+    #     from fabric import Connection
+    #     from fabric.config import Config
+    #     config = Config()
+    #     config.user = self.user
+    #     conn = Connection(host=self.host, config=config, inline_ssh_env=True)
+    #     conn.client.load_system_host_keys()
 
-        # if self.auth_interactive_dumb:
-        #     from lmn.helper.ssh import overwrite_auth_fn
-        #     conn.client = overwrite_auth_fn(conn.client)
+    #     # if self.auth_interactive_dumb:
+    #     #     from lmn.helper.ssh import overwrite_auth_fn
+    #     #     conn.client = overwrite_auth_fn(conn.client)
 
-        self._conn = conn
-        return conn
+    #     self._conn = conn
+    #     return conn
 
     def get_dict(self):
         return {key: val for key, val in vars(self).items() if not (key.startswith('__') or callable(val))}
@@ -112,6 +111,7 @@ class CLISSHClient:
         raise NotImplementedError
 
 
+# DEPRECATED
 class SimpleSSHClient:
     """Given a remote config, this provides an interface to ssh into a remote machine.
     """

@@ -11,7 +11,7 @@ class SlurmConfig(BaseModel):
     """Let's keep it minimal. Conceptually it's better to store SlurmConfig here,
     but that would make it harder to read.
     """
-    job_name: str
+    job_name: str = 'default-job-name'  # To be filled
     partition: str = 'cpu'
     constraint: Optional[str] = None
     cpus_per_task: int = 1

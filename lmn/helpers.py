@@ -74,6 +74,7 @@ def parse_config(project_root):
     if path_found:
         with open(path, 'r') as f:
             global_conf = json.load(f)
+        logger.debug(f'Loaded global config from {path}')
     else:
         logger.warn('lmn global config file cannot be found. You may place the global config file at ~/.config/lmn.json5')
         global_conf = {}
@@ -83,6 +84,7 @@ def parse_config(project_root):
         local_conf = _maybe_load(f'{project_root}/{local_conf_fname}')
 
         if local_conf:
+            logger.debug(f'Loaded local config from {project_root}/{local_conf_fname}')
             break
 
     merged_conf = merge_nested_dict(global_conf, local_conf)
