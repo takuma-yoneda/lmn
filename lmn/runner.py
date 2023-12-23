@@ -3,7 +3,7 @@ import threading
 import time
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Optional
+from typing import TYPE_CHECKING, Iterable, List, Optional, Union
 from tempfile import NamedTemporaryFile
 from lmn import logger
 from lmn.helpers import replace_lmn_envvars
@@ -38,7 +38,7 @@ class SSHRunner:
         self.client = client
         self.lmndirs = lmndirs
 
-    def exec(self, cmd: str, relative_workdir, env: dict | None = None, startup: str | List[str] = "", dry_run: bool = False):
+    def exec(self, cmd: str, relative_workdir, env: Optional[dict] = None, startup: Union[str, List[str]] = "", dry_run: bool = False):
         env = {} if env is None else env
         # if isinstance(cmd, list):
         #     cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
@@ -217,7 +217,7 @@ class SlurmRunner:
 
     def exec(self, cmd: str, relative_workdir, conf, env: Optional[dict] = None,
              env_from_host: List[str] = [],
-             startup: str | List[str] = "", timestamp: str = "", num_sequence: int = 1,
+             startup: Union[str, List[str]] = "", timestamp: str = "", num_sequence: int = 1,
              interactive: bool = None, dry_run: bool = False):
         """
         Args:
@@ -325,7 +325,7 @@ class PBSRunner:
 
     def exec(self, cmd: str, relative_workdir, conf: PBSConfig, env: Optional[dict] = None,
              env_from_host: List[str] = [],
-             startup: str | List[str] = "", timestamp: str = "", num_sequence: int = 1,
+             startup: Union[str, List[str]] = "", timestamp: str = "", num_sequence: int = 1,
              interactive: bool = None, dry_run: bool = False):
         from lmn.scheduler.pbs import PBSCommand
         env = {} if env is None else env

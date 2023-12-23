@@ -12,7 +12,7 @@ from lmn.runner import SlurmRunner, PBSRunner
 from lmn.cli.sync import _sync_output, _sync_code
 
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Optional
 if TYPE_CHECKING:
     from lmn.cli._config_loader import Project, Machine
 
@@ -138,7 +138,7 @@ def parse_sweep_idx(sweep_str):
     return sweep_ind
 
 
-def print_conf(mode: str, machine: Machine, image: str | None = None):
+def print_conf(mode: str, machine: Machine, image: Optional[str] = None):
     output = f'Running with [{mode}] mode on [{machine.remote_conf.base_uri}]'
     if image is not None:
         output += f' with image: [{image}]'

@@ -20,7 +20,7 @@ REMOTE_ROOT_DIR = '/tmp'
 
 class Project:
     """Maintains the info specific to the local project"""
-    def __init__(self, name: str, rootdir: str | Path,
+    def __init__(self, name: str, rootdir: Union[str, Path],
                  outdir: Optional[str] = None, exclude: Optional[List[str]] = None,
                  startup: Union[str, List[str]] = "",
                  mount_from_host: Optional[dict] = None,
@@ -52,7 +52,7 @@ class Machine:
     """Maintains machine configuration.
     - RemoteConfig (user, hostname, uri)
     """
-    def __init__(self, remote_conf: RemoteConfig, lmndir: str | Path,
+    def __init__(self, remote_conf: RemoteConfig, lmndir: Union[str, Path],
                  parsed_conf: dict,
                  startup: Union[str, List[str]] = "",
                  env: Optional[dict] = None) -> None:
@@ -84,7 +84,7 @@ class Machine:
         )
 
 
-def get_docker_lmndirs(lmndir: Path | str, project_name: str) -> Namespace:
+def get_docker_lmndirs(lmndir: Union[Path, str], project_name: str) -> Namespace:
     rootdir = Path(lmndir) / project_name
     return Namespace(
         codedir=str(rootdir / 'code'),

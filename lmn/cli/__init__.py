@@ -4,6 +4,7 @@ from lmn import __version__
 from lmn import logger
 import sys
 import argparse
+from typing import List, Optional
 
 
 def global_parser():
@@ -76,7 +77,7 @@ def core(args):
     parsed.handler(project, remote_conf, parsed, preset_conf)
 
 
-def main(args: list[str] | None = None) -> None:
+def main(args: Optional[List[str]] = None) -> None:
     """
     Entrypoint for the CLI.
     Arguments are only for test (it is always None if calling via CLI).

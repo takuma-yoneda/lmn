@@ -14,7 +14,7 @@ from lmn.helpers import replace_lmn_envvars
 from lmn.cli._config_loader import Project, Machine
 from lmn.machine import CLISSHClient
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from ._config_loader import Machine
 
@@ -43,7 +43,7 @@ def _get_parser() -> ArgumentParser:
     return parser
 
 
-def print_conf(mode: str, machine: Machine, image: str | None = None):
+def print_conf(mode: str, machine: Machine, image: Optional[str] = None):
     output = f'Running with [{mode}] mode on [{machine.remote_conf.base_uri}]'
     if image is not None:
         output += f' with image: [{image}]'
