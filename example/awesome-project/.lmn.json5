@@ -87,6 +87,64 @@
                 "error": "slurm-%j.error.log",
                 "exclude": "gpu0,gpu18",
             }
+        },
+        "polaris-pbs": {
+            // Host information
+            "host": "polaris.alcf.anl.gov",
+            "user": "tyoneda",
+            // Rsync target directory (on the remote host)
+            "root_dir": "/grand/projects/SuperBERT/takuma/lmn",
+            // Mode: ["ssh", "docker", "slurm", "pbs", "slurm-sing", "pbs-sing"]
+            "mode": "pbs",
+            // PBS configuration
+            "pbs": {
+                "account": "SuperBERT",
+                "queue": "debug",
+                "filesystems": "home:grand",
+                "select": 1,
+                "place": "free",
+                "walltime": "01:00:00",
+            },
+            // Startup command
+            "startup": [
+                "export http_proxy='http://proxy-01.pub.alcf.anl.gov:3128'",
+                "export https_proxy='http://proxy-01.pub.alcf.anl.gov:3128'",
+                "export ftp_proxy='http://proxy-01.pub.alcf.anl.gov:3128'",
+            ],
+        },
+        "polaris-pbs-sing": {
+            // Host information
+            "host": "polaris.alcf.anl.gov",
+            "user": "tyoneda",
+            // Rsync target directory (on the remote host)
+            "root_dir": "/grand/projects/SuperBERT/takuma/lmn",
+            // Mode: ["ssh", "docker", "slurm", "pbs", "slurm-sing", "pbs-sing"]
+            "mode": "pbs-sing",
+            // Singularity configurations
+            "singularity": {
+                "sif_file": "/grand/projects/SuperBERT/takuma/lmn-example/singularity/my_env.sif",  // Path on the remote host
+                "writable_tmpfs": true,
+                // "startup": "ldconfig /.singularity.d/libs",  // Command to run after starting up the container
+                "mount_from_host": {
+                    "/grand/projects/SuperBERT/takuma/lmn-example/project": "/project",
+                }
+            },
+            // PBS configuration
+            "pbs": {
+                "account": "SuperBERT",
+                "queue": "debug",
+                "filesystems": "home:grand",
+                "select": 1,
+                "place": "free",
+                "walltime": "01:00:00",
+            },
+            // Startup commands
+            "startup": [
+                "export http_proxy='http://proxy-01.pub.alcf.anl.gov:3128'",
+                "export https_proxy='http://proxy-01.pub.alcf.anl.gov:3128'",
+                "export ftp_proxy='http://proxy-01.pub.alcf.anl.gov:3128'",
+                "module load singularity",
+            ]
         }
     }
 }
