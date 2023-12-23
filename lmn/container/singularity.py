@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Union
 from lmn import logger
 
 
@@ -9,7 +9,7 @@ class SingularityConfig(BaseModel):
     env_from_host: List[str] = []
     mount_from_host: dict = {}
     overlay: Optional[str] = None
-    startup: Optional[str] = None
+    startup: Union[str, List[str], None] = None
     pwd: Optional[str] = None
 
     runtime: str = "singularity"
@@ -38,7 +38,9 @@ class SingularityCommand:
         options = SingularityCommand.make_options(c)
 
         if c.startup:
-            cmd = f"{c.startup} && {cmd}"
+            if isinstance(c.startup, list):
+                startup = " ; ".join(c.startup)
+            cmd = f"{startup} ; {cmd}"
         # Escape special chars and quotes (https://stackoverflow.com/a/18886646/19913466)
         logger.debug(f"cmd before escape: {cmd}")
         cmd = cmd.encode("unicode-escape").replace(b'"', b'\\"').decode("utf-8")
@@ -70,6 +72,11 @@ class SingularityCommand:
         if c.env:
             options += [
                 "--env " + ",".join(f'{key}="{val}"' for key, val in c.env.items())
+            ]
+
+        if c.env_from_host:
+            options += [
+                "--env " + ",".join(f'{envvar}=${envvar}' for envvar in c.env_from_host)
             ]
 
         # Handle binds:

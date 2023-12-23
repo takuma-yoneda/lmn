@@ -69,7 +69,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
     env = {**project.env, **machine.env}
     lmndirs = machine.get_lmndirs(project.name)
 
-    startup = ' && '.join([e for e in [project.startup, machine.startup] if e.strip()])
+    startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
 
     # If parsed.mode is not set, try to read from the config file.
     from lmn.runner import SSHRunner

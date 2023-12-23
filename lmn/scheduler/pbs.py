@@ -1,35 +1,24 @@
 #!/usr/bin/env python3
-from typing import List
+from typing import List, Optional
 from copy import deepcopy
+from pydantic import BaseModel
 
 
-class PBSConfig:
-    def __init__(self,
-                 job_name: str,
-                 account='SuperBERT',  # Account string
-                 queue='preemptable',  # debug, small, medium, large, etc. (Check `qstat -q`)
-                 shell='/usr/bin/env bash',
-                 filesystems='home:grand',  # Request access to /home and /grand directories
-                 select='1',  # Request 1 node
-                 place='free',  # scatter, pack (default): specify how to distribute allocations (I believe it only matters for multi-node allocation ?)
-                 walltime='72:00:00',  # 1 hour for debug queue, 72 hours for preemptable queue
-                 ):
-        self.account = account
-        self.job_name = job_name
-        self.queue = queue
-        self.shell = shell
-
-        # Resource list
-        self._filesystems = filesystems
-        self._select = select
-        self._place = place
-        self._walltime = walltime
+class PBSConfig(BaseModel):
+    job_name: str = 'default-job-name'  # To be filled
+    account: str = 'SuperBERT'  # Account string
+    queue: str = 'debug'  # debug, small, medium, large, etc. (Check `qstat -q`)
+    shell: str = '/usr/bin/env bash'
+    filesystems: str = 'home:grand'  # Request access to /home and /grand directories
+    select: int = 1  # Request 1 node
+    place: str = 'free'  # scatter, pack (default): specify how to distribute allocations (I believe it only matters for multi-node allocation ?)
+    walltime: str = '1:00:00'  # 1 hour for debug queue, 72 hours for preemptable queue
 
     @property
     def resource_list(self):
         return [
-            f'place={self._place}', f'walltime={self._walltime}',
-            f'filesystems={self._filesystems}', f'select={self._select}'
+            f'place={self.place}', f'walltime={self.walltime}',
+            f'filesystems={self.filesystems}', f'select={self.select}'
         ]
 
 
@@ -48,6 +37,12 @@ class PBSCommand:
         """
         needs_special_handling = ['l', 'I']
         pbs_config = deepcopy(pbs_config)
+
+        # # Process space
+        # pbs_config = {
+        #     k: f"'{v}'" if isinstance(v, str) and " " in v else v
+        #     for k, v in pbs_config.items()
+        # }
 
         # We need a special handling on `-l` option, since it is allowed to appear multiple times in a command.
         args = [
@@ -75,7 +70,23 @@ class PBSCommand:
 
         args = PBSCommand.make_options(pbs_config)
         if interactive:
-            cmd = ' '.join((qsub_cmd, *args, run_cmd))
+            # NOTE:
+            # ### Issues in interactive mode ###
+            # It's tricky to execute a script in an interactive mode on PBS.
+            # Whenever we use `-I` (interactive) option on qsub like:
+            # `qsub <options> -I <script>`,
+            # the script is simply ignored (actually, only PBS directives, the lines starting with `#PBS`, are respected).
+            # ### Workaround ###
+            # To overcome this issue, we can use `--` option with `bash -c` like:
+            # `qsub <options> -I -- /usr/bin/env bash -c '<command>'`
+            # or
+            # `qsub <options> -I -- /bin/bash -c '<command>'`
+            # This way, we can execute a script and a command in an interactive mode.
+            # If we use a script, just make sure that `bash -c` is included in your script file.
+            # ### Another workaround ###
+            # I found that we can also use `-S` option to execute a script (this is originally for specifying a shell).
+            # `qsub <options> -I -S <script>`
+            cmd = ' '.join((qsub_cmd, *args, '--', run_cmd))
         else:
             batch_args = (f'#PBS {arg}' for arg in args)
             cmd = '\n'.join((

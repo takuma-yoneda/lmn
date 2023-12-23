@@ -1,7 +1,7 @@
 """Load config file and fuse it with runtime options"""
 from __future__ import annotations
 from argparse import Namespace
-from typing import Optional, List
+from typing import Optional, List, Union
 import os
 import pathlib
 from pathlib import Path
@@ -22,13 +22,15 @@ class Project:
     """Maintains the info specific to the local project"""
     def __init__(self, name: str, rootdir: str | Path,
                  outdir: Optional[str] = None, exclude: Optional[List[str]] = None,
-                 startup: str = "",
+                 startup: Union[str, List[str]] = "",
                  mount_from_host: Optional[dict] = None,
                  env: Optional[dict] = None) -> None:
         self.name = name
         self.rootdir = Path(rootdir)
         self.outdir = self.rootdir / ".output" if outdir is None else outdir
         self.exclude = exclude
+        if isinstance(startup, list):
+            startup = '; '.join(startup)
         self.startup = startup
         self.env = env if env is not None else {}
         self.mount_from_host = mount_from_host if mount_from_host is not None else {}
@@ -52,12 +54,15 @@ class Machine:
     """
     def __init__(self, remote_conf: RemoteConfig, lmndir: str | Path,
                  parsed_conf: dict,
-                 startup: str = "",
+                 startup: Union[str, List[str]] = "",
                  env: Optional[dict] = None) -> None:
         self.remote_conf = remote_conf
         self.lmndir = Path(lmndir)
         self.env = env if env is not None else {}
-        self.startup = startup or parsed_conf.startup
+        startup = startup or parsed_conf.startup
+        if isinstance(startup, list):
+            startup = '; '.join(startup)
+        self.startup = startup
         self.parsed_conf = parsed_conf
 
         # aliases

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Union
 
 
 def get_gpu_device():
@@ -24,7 +24,7 @@ class DockerContainerConfig(BaseModel):
     remove: bool = True
     network: str = 'bridge'
     ipc_mode: str = 'private'
-    startup: Optional[str] = None
+    startup: Union[str, List[str], None] = None
     tty: bool = True
     gpus: str = 'all'
     user_id: int = 0

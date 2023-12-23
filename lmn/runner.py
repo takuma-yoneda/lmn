@@ -38,13 +38,15 @@ class SSHRunner:
         self.client = client
         self.lmndirs = lmndirs
 
-    def exec(self, cmd: str, relative_workdir, env: dict | None = None, startup: str = "", dry_run: bool = False):
+    def exec(self, cmd: str, relative_workdir, env: dict | None = None, startup: str | List[str] = "", dry_run: bool = False):
         env = {} if env is None else env
         # if isinstance(cmd, list):
         #     cmd = ' '.join(cmd) if len(cmd) > 1 else cmd[0]
 
         if startup:
-            cmd = f'{startup} && {cmd}'
+            if isinstance(startup, list):
+                startup = ' ; '.join(startup)
+            cmd = f'{startup} ; {cmd}'
 
         logger.debug(f'ssh run with command: {cmd}')
         if relative_workdir is not None:
@@ -104,16 +106,20 @@ class DockerRunner:
         # NOTE: Intentionally being super verbose to make arguments explicit.
         d = docker_conf
 
+        # HACK: if docker.startup is a list, flatten it to a string
+        if isinstance(docker_conf.startup, list):
+            docker_conf.startup = ' ; '.join(docker_conf.startup)
+
         # TEMP: When running in non-interactive mode and command fails, container disappears before we attach to its log stream,
         # and thus we cannot observe its error message. A naive way to avoid it is to wait for a bit before command execution.
         if not interactive:
             if docker_conf.startup:
-                docker_conf.startup = ' && '.join((docker_conf.startup, 'sleep 2'))
+                docker_conf.startup = ' ; '.join((docker_conf.startup, 'sleep 2'))
             else:
                 docker_conf.startup = 'sleep 2'
 
         if docker_conf.startup:
-            cmd = ' && '.join((docker_conf.startup, cmd))
+            cmd = ' ; '.join((docker_conf.startup, cmd))
         cmd = f'{cmd} && chmod -R a+r {str(self.lmndirs.outdir)}'
 
         assert d.tty
@@ -209,9 +215,9 @@ class SlurmRunner:
         self.client = client
         self.lmndirs = lmndirs
 
-    def exec(self, cmd: str, relative_workdir, slurm_conf, env: Optional[dict] = None,
+    def exec(self, cmd: str, relative_workdir, conf, env: Optional[dict] = None,
              env_from_host: List[str] = [],
-             startup: str = "", timestamp: str = "", num_sequence: int = 1,
+             startup: str | List[str] = "", timestamp: str = "", num_sequence: int = 1,
              interactive: bool = None, dry_run: bool = False):
         """
         Args:
@@ -228,12 +234,12 @@ class SlurmRunner:
 
         if num_sequence > 1:
             # Use sbatch and set dependency to singleton
-            slurm_conf.dependency = 'singleton'
+            conf.dependency = 'singleton'
             if interactive:
                 logger.warning(f'num_sequence is set to {num_sequence} (> 1). Force disabling interactive mode')
                 interactive = False
 
-        s = slurm_conf
+        s = conf
         slurm_command = SlurmCommand(cpus_per_task=s.cpus_per_task,
                                      job_name=s.job_name,
                                      partition=s.partition,
@@ -255,7 +261,9 @@ class SlurmRunner:
         allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
 
         if startup:
-            cmd = f'{startup} && {cmd}'
+            if isinstance(startup, list):
+                startup = ' ; '.join(startup)
+            cmd = f'{startup} ; {cmd}'
 
         workdir = Path(self.lmndirs.codedir) / relative_workdir
 
@@ -263,7 +271,9 @@ class SlurmRunner:
         import shlex
         exports = [f'export {key}={shlex.quote(str(val))}' for key, val in allenv.items()]
 
+        # DEPRECATED
         if env_from_host:
+            logger.warn('"env_from_host" in "slurm" or "pbs" is deprecated. Please move it inside "singularity".')
             # Only matters for Singularity
             exports += [
                 *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
@@ -278,11 +288,15 @@ class SlurmRunner:
             slurm_options += sbatch_cmd.split('\n')[2:-2]  # Strip `sbatch << EOF`, '#!/usr/bin/env/ bash', {cmd} and `EOF`
 
         exec_str = '\n'.join((
-            f'#!/usr/bin/env {s.shell}',
+            # f'#!/usr/bin/env {s.shell}',
+            # NOTE: without `-S` option, `bash -i` will be considered a single command and will end up in command not found.
+            # Reference: https://unix.stackexchange.com/a/657774/556831
+            f'#!/usr/bin/env -S {s.shell} -i',
             *slurm_options,
             *exports,
             cmd
         ))
+        logger.debug(f'\n=== execution string ===\n{exec_str}\n========================')
 
         script_fpath = Path(self.lmndirs.scriptdir) / f'.script-{timestamp}.sh'
         with NamedTemporaryFile(mode='w+') as temp_file:
@@ -309,9 +323,9 @@ class PBSRunner:
         self.client = client
         self.lmndirs = lmndirs
 
-    def exec(self, cmd: str, relative_workdir, pbs_conf: PBSConfig, env: Optional[dict] = None,
+    def exec(self, cmd: str, relative_workdir, conf: PBSConfig, env: Optional[dict] = None,
              env_from_host: List[str] = [],
-             startup: str = "", timestamp: str = "", num_sequence: int = 1,
+             startup: str | List[str] = "", timestamp: str = "", num_sequence: int = 1,
              interactive: bool = None, dry_run: bool = False):
         from lmn.scheduler.pbs import PBSCommand
         env = {} if env is None else env
@@ -326,7 +340,10 @@ class PBSRunner:
         allenv = {key: replace_lmn_envvars(val, lmnenv) for key, val in allenv.items()}
 
         if startup:
-            cmd = f'{startup} && {cmd}'
+            # Use ';' rather than '&&' to avoid error when startup fails
+            if isinstance(startup, list):
+                startup = ' ; '.join(startup)
+            cmd = f'{startup} ; {cmd}'
 
         workdir = Path(self.lmndirs.codedir) / relative_workdir
 
@@ -334,7 +351,9 @@ class PBSRunner:
         import shlex
         exports = [f'export {key}={shlex.quote(str(val))}' for key, val in allenv.items()]
 
+        # DEPRECATED
         if env_from_host:
+            logger.warn('"env_from_host" in "slurm" or "pbs" is deprecated. Please move it inside "singularity".')
             # Only matters for Singularity
             exports += [
                 *[f'export SINGULARITYENV_{envvar}=${envvar}' for envvar in env_from_host],
@@ -342,14 +361,16 @@ class PBSRunner:
             ]
 
         if not interactive:
-            qsub_cmd = PBSCommand.qsub(cmd, pbs_conf, interactive=False)
+            qsub_cmd = PBSCommand.qsub(cmd, conf, interactive=False)
             # HACK: rather than submitting with `sbatch << EOF\n ...\n EOF`,
             # I use `sbatch file-name` to avoid `$ENVVAR` to be evaluated right at the submission time
             # I want the `$ENVVAR` to be evaluated after the compute is allocated.
             slurm_options += qsub_cmd.split('\n')[1:-2]  # Strip `qsub << EOF`, {cmd} and `EOF`
 
         exec_str = '\n'.join((
-            '#!/usr/bin/env bash',
+            # NOTE: without `-S` option, `bash -i` will be considered a single command and will end up in command not found.
+            # Reference: https://unix.stackexchange.com/a/657774/556831
+            '#!/usr/bin/env -S bash -i',
             *slurm_options,
             *exports,
             cmd
@@ -363,7 +384,10 @@ class PBSRunner:
             self.client.put(temp_file.name, script_fpath)
 
         if interactive:
-            cmd = PBSCommand.qsub(str(script_fpath), pbs_conf, interactive=True)
+            cmd = PBSCommand.qsub(str(script_fpath),
+                                  conf,
+                                  qsub_cmd=f'chmod +x {script_fpath} && qsub',  # HACK to make the script executable
+                                  interactive=True)
         else:
             cmd = '\n'.join([f'qsub {script_fpath}'] * num_sequence)
 
