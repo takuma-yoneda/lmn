@@ -288,10 +288,10 @@ class SlurmRunner:
             slurm_options += sbatch_cmd.split('\n')[2:-2]  # Strip `sbatch << EOF`, '#!/usr/bin/env/ bash', {cmd} and `EOF`
 
         exec_str = '\n'.join((
-            # f'#!/usr/bin/env {s.shell}',
             # NOTE: without `-S` option, `bash -i` will be considered a single command and will end up in command not found.
             # Reference: https://unix.stackexchange.com/a/657774/556831
-            f'#!/usr/bin/env -S {s.shell} -i',
+            # f'#!/usr/bin/env -S {s.shell} -i',
+            f'#!/bin/{s.shell} -i',  # ^ This only works with a recent version of coreutils (8.30) and that cannot be taken for granted.
             *slurm_options,
             *exports,
             cmd
@@ -370,7 +370,8 @@ class PBSRunner:
         exec_str = '\n'.join((
             # NOTE: without `-S` option, `bash -i` will be considered a single command and will end up in command not found.
             # Reference: https://unix.stackexchange.com/a/657774/556831
-            '#!/usr/bin/env -S bash -i' if interactive else '#!/usr/bin/env bash',
+            # '#!/usr/bin/env -S bash -i' if interactive else '#!/usr/bin/env bash',
+            f'#!/bin/{s.shell} -i',  # ^ This only works with a recent version of coreutils (8.30) and that cannot be taken for granted.
             *slurm_options,
             *exports,
             cmd
