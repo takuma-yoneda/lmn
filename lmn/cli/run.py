@@ -10,6 +10,7 @@ from lmn.helpers import find_project_root, replace_lmn_envvars
 from lmn.machine import CLISSHClient
 from lmn.runner import SlurmRunner, PBSRunner
 from lmn.cli.sync import _sync_output, _sync_code
+from lmn.const import available_modes
 
 
 from typing import TYPE_CHECKING, Literal, Optional
@@ -62,7 +63,7 @@ def _get_parser() -> ArgumentParser:
         action="store",
         type=str,
         default=None,
-        choices=["ssh", "docker", "slurm", "singularity", "slurm-sing", "sing-slurm"],
+        choices=available_modes,
         help="What mode to run",
     )
     parser.add_argument(
