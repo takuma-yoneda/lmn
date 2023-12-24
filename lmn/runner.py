@@ -370,7 +370,7 @@ class PBSRunner:
         exec_str = '\n'.join((
             # NOTE: without `-S` option, `bash -i` will be considered a single command and will end up in command not found.
             # Reference: https://unix.stackexchange.com/a/657774/556831
-            '#!/usr/bin/env -S bash -i',
+            '#!/usr/bin/env -S bash -i' if interactive else '#!/usr/bin/env bash',
             *slurm_options,
             *exports,
             cmd

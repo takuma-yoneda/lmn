@@ -38,8 +38,7 @@ class SingularityCommand:
         options = SingularityCommand.make_options(c)
 
         if c.startup:
-            if isinstance(c.startup, list):
-                startup = " ; ".join(c.startup)
+            startup = " ; ".join(c.startup) if isinstance(c.startup, list) else c.startup
             cmd = f"{startup} ; {cmd}"
         # Escape special chars and quotes (https://stackoverflow.com/a/18886646/19913466)
         logger.debug(f"cmd before escape: {cmd}")
