@@ -349,7 +349,6 @@ def handler_scheduler(
     startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
     lmndirs = machine.get_lmndirs(project.name)
     env = {**project.env, **machine.env}
-    env_from_host = []
 
     ssh_client = CLISSHClient(machine.remote_conf)
 
@@ -469,7 +468,7 @@ def handler_scheduler(
         # NOTE: Since CUDA_VISIBLE_DEVICES is often comma-separated values (i.e., CUDA_VISIBLE_DEVICES=0,1),
         # and `singularity run --env FOO=BAR,HOGE=PIYO` considers comma to be a separator for envvars,
         # It fails without special handling.
-        sing_conf.env_from_host += ['CUDA_VISIBLE_DEVICES', 'SLURM_JOBID', 'SLURM_JOB_ID', 'SLURM_TASK_PID']
+        sing_conf.env_from_host += ['SLURM_JOBID', 'SLURM_JOB_ID', 'SLURM_TASK_PID']
 
         # Integrate current `env`, `mount_from_host`
         sing_conf.env.update(env)
@@ -515,11 +514,11 @@ def handler_scheduler(
                         startup=startup,
                         timestamp=timestamp,
                         interactive=False, num_sequence=run_opt.num_sequence,
-                        env=env, env_from_host=env_from_host, dry_run=run_opt.dry_run)
+                        env=env, dry_run=run_opt.dry_run)
     else:
         runner.exec(run_opt.cmd, run_opt.rel_workdir, conf=scheduler_conf,
                     startup=startup, timestamp=timestamp, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
-                    env=env, env_from_host=env_from_host, dry_run=run_opt.dry_run)
+                    env=env, dry_run=run_opt.dry_run)
 
 
 name = 'run'

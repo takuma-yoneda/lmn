@@ -76,7 +76,9 @@
                 "startup": "ldconfig /.singularity.d/libs",  // Command to run after starting up the container
                 "mount_from_host": {
                     "/share/data/ripl/lmn-example/project": "/project",
-                }
+                },
+                // tticslurm specific config
+                "env_from_host": ["CUDA_VISIBLE_DEVICES"],
             },
             // Slurm configuration
             "slurm": {
