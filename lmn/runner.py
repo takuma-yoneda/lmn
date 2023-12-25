@@ -371,7 +371,7 @@ class PBSRunner:
             # NOTE: without `-S` option, `bash -i` will be considered a single command and will end up in command not found.
             # Reference: https://unix.stackexchange.com/a/657774/556831
             # '#!/usr/bin/env -S bash -i' if interactive else '#!/usr/bin/env bash',
-            f'#!/bin/{s.shell} -i',  # ^ This only works with a recent version of coreutils (8.30) and that cannot be taken for granted.
+            f'#!/bin/{conf.shell} -i',  # ^ This only works with a recent version of coreutils (8.30) and that cannot be taken for granted.
             *slurm_options,
             *exports,
             cmd

@@ -42,7 +42,6 @@ def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_con
         cmd = f"rsync {options_str} {remote_conf.base_uri}:{source_dir} {target_dir}"
     else:
         cmd = f"rsync {options_str} {source_dir} {remote_conf.base_uri}:{target_dir}"
-    logger.debug(f'running command: {cmd}')
 
     if not dry_run:
         run_cmd(cmd, shell=True)

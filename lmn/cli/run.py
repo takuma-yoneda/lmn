@@ -370,7 +370,7 @@ def handler_scheduler(
                 logger.error(f'Slurm config preset: "{parsed.sconf}" cannot be found in "slurm-configs" or is empty.')
                 import sys; sys.exit(1)
             scheduler_conf = SlurmConfig(**_sconf)
-            logger.debug(f'Using preset: {parsed.sconf}')
+            logger.info(f'Using Slurm preset: [{parsed.sconf}]')
 
         runner = SlurmRunner(ssh_client, lmndirs)
 
@@ -381,24 +381,25 @@ def handler_scheduler(
             raise ValueError('Configuration must have an entry for "pbs" to use PBS mode.')
 
         # Create PBSConfig object
-        if parsed.sconf is None:
+        if parsed.pbsconf is None:
             scheduler_conf = machine.parsed_conf.pbs
         else:
             # Try to load from the slurm conf presets
             logger.debug('parsed.sconf is specified. Loading custom preset conf.')
-            _pconf = preset.get('pbs-configs', {}).get(parsed.pconf, {})
+            _pconf = preset.get('pbs-configs', {}).get(parsed.pbsconf, {})
             if not _pconf:
-                logger.error(f'PBS config preset: "{parsed.pconf}" cannot be found in "pbs-configs" or is empty.')
+                logger.error(f'PBS config preset: "{parsed.pbsconf}" cannot be found in "pbs-configs" or is empty.')
                 import sys; sys.exit(1)
             scheduler_conf = PBSConfig(**_pconf)
-            logger.debug(f'Using preset: {parsed.pconf}')
+            logger.info(f'Using PBS preset: [{parsed.pbsconf}]')
 
         runner = PBSRunner(ssh_client, lmndirs)
 
     else:
-        raise ValueError(f'Unrecognized mode: {mode}')
+        logger.error(f'Unrecognized mode: {mode}')
+        import sys; sys.exit(1)
 
-    # NOTE: Slurm seems to be fine with duplicated name. (How about PBS?)
+    # NOTE: Slurm / PBS seem to be fine with duplicated name.
     proj_name_maxlen = 15
     rand_num = random.randint(0, 100)
     job_name = f'lmn-{project.name[:proj_name_maxlen]}-{randomname.get_name()}-{rand_num}'
@@ -407,7 +408,7 @@ def handler_scheduler(
     scheduler_conf.job_name = job_name
 
     if run_opt.force:
-        logger.warn("`-f / --force` option has no effect in slurm mode")
+        logger.warn("`-f / --force` option has no effect in Slurm / PBS mode")
 
     # Specify job name
     name = f'{machine.user}-lmn-{project.name}'

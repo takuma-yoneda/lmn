@@ -8,7 +8,7 @@ class PBSConfig(BaseModel):
     job_name: str = 'default-job-name'  # To be filled
     account: str = 'SuperBERT'  # Account string
     queue: str = 'debug'  # debug, small, medium, large, etc. (Check `qstat -q`)
-    shell: str = '/usr/bin/env bash'
+    shell: str = 'bash'  # It will be fed to `/bin/{shell}` template
     filesystems: str = 'home:grand'  # Request access to /home and /grand directories
     select: int = 1  # Request 1 node
     place: str = 'free'  # scatter, pack (default): specify how to distribute allocations (I believe it only matters for multi-node allocation ?)

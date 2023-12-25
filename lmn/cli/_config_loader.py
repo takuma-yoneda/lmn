@@ -124,6 +124,7 @@ def load_config(machine_name: str):
     # Parse special config params
     preset_conf = {
         'slurm-configs': config.get('slurm-configs', {}),
+        'pbs-configs': config.get('pbs-configs', {}),
         'docker-images': config.get('docker-images', {}),
     }
 
