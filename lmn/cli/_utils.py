@@ -31,7 +31,6 @@ def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_con
 
     source_dir = str(source_dir).rstrip('/') + ('' if transfer_rootdir else '/')
     target_dir = str(target_dir).rstrip('/') + '/'
-    logger.info(f"Syncing code... ({remote_conf.base_uri}:{target_dir})")
 
     # TODO: Move the ControlPath to global config
     options += [f'-e "ssh -o \'ControlPath=~/.ssh/lmn-ssh-socket-{remote_conf.host}\'"']
@@ -40,8 +39,10 @@ def rsync(source_dir: Union[Path, str], target_dir: Union[Path, str], remote_con
     options_str = ' '.join(options)
     if to_local:
         cmd = f"rsync {options_str} {remote_conf.base_uri}:{source_dir} {target_dir}"
+        logger.info(f"Syncing files ({remote_conf.base_uri}:{source_dir} to {target_dir})")
     else:
         cmd = f"rsync {options_str} {source_dir} {remote_conf.base_uri}:{target_dir}"
+        logger.info(f"Syncing files ({source_dir} to {remote_conf.base_uri}:{target_dir})")
 
     if not dry_run:
         run_cmd(cmd, shell=True)
