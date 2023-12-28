@@ -1,6 +1,6 @@
 [project]
 name = "lmn"
-version = "0.4.0"
+version = "0.4.1"
 description = "LMN: A simple launcher"
 authors = [
     {name = "Takuma Yoneda", email = "takuma-yoneda@users.noreply.github.com"},
