@@ -1,5 +1,9 @@
 # Configurations
 
+To know more about possible configurations, please first **take a look at the [example configuration](/example/awesome-project/.lmn.json5)**.
+
+The sections below explain further details in LMN config and its features:
+
 ## Global and local configurations
 `lmn` looks for configuration files in this order:
 1. `{project_root}/.lmn.json5`
