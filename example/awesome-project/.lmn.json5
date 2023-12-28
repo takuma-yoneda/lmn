@@ -1,7 +1,7 @@
 {
     "project": {
         "name": "awesome_project",
-        "exclude": ["*.mp4"],  // Exclude files from rsync
+        "exclude": ["*.mp4", ".git", ".venv", "wandb", "__pycache__"],  // Exclude files from rsync
     },
     "machines": {
         /* Activate conda environment and run a script */
