@@ -80,7 +80,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                     relative_workdir=runtime_options.rel_workdir,
                     startup=startup,
                     env=env,
-                    dry_run=runtime_options.dry_run)
+                    dry_run=parsed.dry_run)
 
 
 name = 'brun'

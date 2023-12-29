@@ -186,7 +186,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             runtime_options.name = _hash
             logger.info(f'--contain flag is set.\n\tsetting the remote lmndir to {machine.lmndir}\n\tsetting jobs suffix to {_hash}')
 
-        _sync_code(project, machine, runtime_options.dry_run)
+        _sync_code(project, machine, parsed.dry_run)
 
 
     # If parsed.mode is not set, try to read from the config file.
