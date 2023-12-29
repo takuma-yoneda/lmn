@@ -145,7 +145,7 @@ $ lmn run tticslurm -d -- python train.py
 
 # Launching a sweep (batch jobs) that runs in the Singularity container via Slurm scheduler (on tticslurm)
 # This submits 10 batch jobs where `$LMN_RUN_SWEEP_IDX` is set from 0 to 9.
-$ lmn run tticslurm --sweep 0-10 -d -- python train.py -l '$LMN_RUN_SWEEP_IDX'
+$ lmn run tticslurm --sweep 0-9 -d -- python train.py -l '$LMN_RUN_SWEEP_IDX'
 
 # Run a script on the login node (on tticslurm)
 $ lmn run tticslurm --mode ssh -- squeue -u takuma
@@ -160,8 +160,8 @@ $ lmn run --help
 <details>
 <summary>More about `--sweep` format</summary>
     
-- `--sweep 0-10`: ten jobs with `LMN_RUN_SWEEP_IDX=0`, `1` through `9`
-  - Internally `lmn` simply runs `range(0, 10)`
+- `--sweep 0-9`: ten jobs with `LMN_RUN_SWEEP_IDX=0`, `1` through `9`
+  - Internally `lmn` simply runs `range(0, 9 + 1)`
 - `--sweep 7`: a single job with `LMN_RUN_SWEEP_IDX=7`
 - `--sweep 3,5,8`:  three jobs with `LMN_RUN_SWEEP_IDX=3` and `5` and `8`
 </details>

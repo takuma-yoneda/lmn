@@ -124,17 +124,36 @@ def parse_sweep_idx(sweep_str):
     # format #0: 8 --> 8
     # format #1: 1-10 --> range(1, 10)
     # format #2: 1,2,7 --> [1, 2, 7]
+    import re
+    from typing import Pattern
+    allowed_formats = """
+    `--sweep 8` --> 8
+    `--sweep 1-10` --> [1, 2, ..., 10]
+    `--sweep 1,2,7` --> [1, 2, 7]
+    """
+    def check_pattern(string: str, pattern: Pattern):
+        if not pattern.match(string):
+            logger.error(f'Invalid sweep range format. Allowed formats are:\n{allowed_formats}')
+            import sys; sys.exit(1)
+
     if '-' in sweep_str:
-        # format #1
+        # Validate the format
+        pattern = re.compile(r'^\d+-\d+$')
+        check_pattern(sweep_str, pattern)
         begin, end = [int(val) for val in sweep_str.split('-')]
-        assert begin < end
-        sweep_ind = range(begin, end)
+        if begin >= end:
+            logger.error(f'Invalid sweep range: {begin} must be smaller than {end}')
+            import sys; sys.exit(1)
+        sweep_ind = range(begin, end + 1)
     elif ',' in sweep_str:
+        pattern = re.compile(r'^\d+(,\d+)+$')
+        check_pattern(sweep_str, pattern)
         sweep_ind = [int(e) for e in sweep_str.strip().split(',')]
     elif sweep_str.isnumeric():
         sweep_ind = [int(sweep_str)]
     else:
-        raise KeyError("Format for --sweep option is not recognizable. Format examples: '1-10', '8', '1,2,7'.")
+        logger.error(f'Invalid sweep range format. Allowed formats are:\n{allowed_formats}')
+        import sys; sys.exit(1)
 
     return sweep_ind
 
@@ -178,6 +197,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                                 sconf=parsed.sconf,
                                 dconf=parsed.dconf,
                                 force=parsed.force)
+
+    # Before running anything significant, validate --sweep format if specified
+    if runtime_options.sweep:
+        # This will raise an error if the format is invalid
+        parse_sweep_idx(runtime_options.sweep)
 
     # TODO:
     # - If configured, run a pre-flight ssh with ControlMaster to establish & retain the connection
