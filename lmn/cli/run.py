@@ -78,12 +78,6 @@ def _get_parser() -> ArgumentParser:
         action="store_true",
         help="When a job with the same name already exists, kill it and run the new one (only for Docker mode)",
     )
-    # parser.add_argument(
-    #     "-X",
-    #     "--x-forward",
-    #     action="store_true",
-    #     help="X11 forwarding",
-    # )
     parser.add_argument(
         "--no-sync",
         action="store_true",
@@ -140,7 +134,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
     curr_dir = Path(os.getcwd()).resolve()
     proj_rootdir = find_project_root()
     rel_workdir = curr_dir.relative_to(proj_rootdir)
-    logger.debug(f'relative working dir: {rel_workdir}')  # cwd.relative_to(project_root)
+    logger.debug(f'relative working dir: {rel_workdir}')
     if isinstance(parsed.remote_command, list):
         cmd = ' '.join(parsed.remote_command)
     else:
@@ -175,11 +169,6 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
     if not parsed.no_sync:
         if parsed.contain:
             # Generate a unique path and set it to machine.lmndir
-            # BUG: This generates the same hash every time!! This stack overflow answer is obviously wrong: https://stackoverflow.com/a/6048639/19913466
-            # import hashlib
-            # import time
-            # hashlib.sha1().update(str(time.time()).encode("utf-8"))
-            # _hash = hashlib.sha1().hexdigest()
             from lmn.helpers import get_timestamp
             _hash = get_timestamp()
             machine.lmndir = Path(f'{machine.lmndir}/{_hash}')
@@ -197,7 +186,6 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
     if mode == 'ssh':
         from lmn.runner import SSHRunner
-        # ssh_client = SimpleSSHClient(machine.remote_conf)
 
         startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
         lmndirs = machine.get_lmndirs(project.name)
@@ -242,11 +230,6 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
         docker_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
 
-        # Load Docker-specific configurations
-        # docker_pconf = DockerContainerConfig(**{
-        #     'name': name,
-        #     **machine.parsed_conf['docker']
-        # })
         docker_pconf = machine.parsed_conf.docker
         docker_pconf.name = name
 
@@ -413,9 +396,6 @@ def handler_scheduler(
         # Update `pwd` entry
         sing_conf = machine.parsed_conf.singularity
         sing_conf.pwd = str(sing_lmndirs.codedir / run_opt.rel_workdir)
-
-        print('========= the value of env at this point is =======')
-        print(env)
 
         # TODO: Use get_lmndirs function!
         # TODO: Do we need this??
