@@ -315,7 +315,6 @@ def handler_scheduler(
 
     startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
     lmndirs = machine.get_lmndirs(project.name)
-    env = {**project.env, **machine.env}
 
     ssh_client = CLISSHClient(machine.remote_conf)
 
@@ -399,16 +398,16 @@ def handler_scheduler(
 
         # TODO: Use get_lmndirs function!
         # TODO: Do we need this??
-        env.update({
+        sing_env = {
             'LMN_PROJECT_NAME': project.name,
             'LMN_CODE_DIR': sing_lmndirs.codedir,
             'LMN_MOUNT_DIR': sing_lmndirs.mountdir,
             'LMN_OUTPUT_DIR': sing_lmndirs.outdir,
             'LMN_SCRIPT_DIR': sing_lmndirs.scriptdir,
-        })
+        }
 
         # Backward compat
-        env.update({
+        sing_env.update({
             'RMX_PROJECT_NAME': project.name,
             'RMX_CODE_DIR': sing_lmndirs.codedir,
             'RMX_MOUNT_DIR': sing_lmndirs.mountdir,
@@ -436,7 +435,7 @@ def handler_scheduler(
         sing_conf.env_from_host += ['SLURM_JOBID', 'SLURM_JOB_ID', 'SLURM_TASK_PID']
 
         # Integrate current `env`, `mount_from_host`
-        sing_conf.env.update(env)
+        sing_conf.env.update({**sing_env, **project.env})
         sing_conf.mount_from_host.update(mount_from_host)
 
         # Finally overwrite run_opt.cmd
@@ -444,6 +443,8 @@ def handler_scheduler(
 
     timestamp = f"{time.time():.5f}".split('.')[-1]  # 5 subdigits of the timestamp
     print_conf(mode, machine, image=sing_conf.sif_file if mode in ['slurm-sing', 'sing-slurm'] else None)
+
+    env = {**project.env, **machine.env}
     if parsed.sweep:
         if not run_opt.disown:
             logger.error("You must set -d option to use sweep functionality.")
