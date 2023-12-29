@@ -6,7 +6,7 @@ from pathlib import Path
 from argparse import ArgumentParser
 from argparse import Namespace
 from lmn import logger
-from lmn.helpers import find_project_root, replace_lmn_envvars
+from lmn.helpers import find_project_root, parse_sweep_idx
 from lmn.machine import CLISSHClient
 from lmn.runner import SlurmRunner, PBSRunner
 from lmn.cli.sync import _sync_output, _sync_code
@@ -119,45 +119,6 @@ def _get_parser() -> ArgumentParser:
     return parser
 
 
-def parse_sweep_idx(sweep_str):
-    # Parse input
-    # format #0: 8 --> 8
-    # format #1: 1-10 --> range(1, 10)
-    # format #2: 1,2,7 --> [1, 2, 7]
-    import re
-    from typing import Pattern
-    allowed_formats = """
-    `--sweep 8` --> 8
-    `--sweep 1-10` --> [1, 2, ..., 10]
-    `--sweep 1,2,7` --> [1, 2, 7]
-    """
-    def check_pattern(string: str, pattern: Pattern):
-        if not pattern.match(string):
-            logger.error(f'Invalid sweep range format. Allowed formats are:\n{allowed_formats}')
-            import sys; sys.exit(1)
-
-    if '-' in sweep_str:
-        # Validate the format
-        pattern = re.compile(r'^\d+-\d+$')
-        check_pattern(sweep_str, pattern)
-        begin, end = [int(val) for val in sweep_str.split('-')]
-        if begin >= end:
-            logger.error(f'Invalid sweep range: {begin} must be smaller than {end}')
-            import sys; sys.exit(1)
-        sweep_ind = range(begin, end + 1)
-    elif ',' in sweep_str:
-        pattern = re.compile(r'^\d+(,\d+)+$')
-        check_pattern(sweep_str, pattern)
-        sweep_ind = [int(e) for e in sweep_str.strip().split(',')]
-    elif sweep_str.isnumeric():
-        sweep_ind = [int(sweep_str)]
-    else:
-        logger.error(f'Invalid sweep range format. Allowed formats are:\n{allowed_formats}')
-        import sys; sys.exit(1)
-
-    return sweep_ind
-
-
 def print_conf(mode: str, machine: Machine, image: Optional[str] = None):
     output = f'Running with [{mode}] mode on [{machine.remote_conf.base_uri}]'
     if image is not None:
@@ -186,26 +147,24 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         cmd = parsed.remote_command
 
     # TODO: Let's use Pydantic
-    runtime_options = Namespace(dry_run=parsed.dry_run,
-                                cmd=cmd,
+    # NOTE: How is it different from `parsed`?
+    # - `runtime_options` serves a similar role as `parsed`, but it can be **modified** by lmn itself
+    # - anything that won't be modified should be in `parsed`
+    runtime_options = Namespace(cmd=cmd,
                                 rel_workdir=rel_workdir,
                                 disown=parsed.disown,
                                 name=parsed.name,
-                                sweep=parsed.sweep,
                                 num_sequence=parsed.num_sequence,
                                 no_sync=parsed.no_sync,
-                                sconf=parsed.sconf,
-                                dconf=parsed.dconf,
                                 force=parsed.force)
 
     # Before running anything significant, validate --sweep format if specified
-    if runtime_options.sweep:
+    if parsed.sweep:
         # This will raise an error if the format is invalid
-        parse_sweep_idx(runtime_options.sweep)
+        parse_sweep_idx(parsed.sweep)
 
-    # TODO:
-    # - If configured, run a pre-flight ssh with ControlMaster to establish & retain the connection
-    # - The following ssh / rsync should rely on this connection
+    # - Run a pre-flight ssh with ControlMaster to establish & retain the connection
+    # - The future ssh / rsync will reuse this connection
     from lmn.helpers import establish_persistent_ssh
     establish_persistent_ssh(machine.remote_conf)
 
@@ -251,7 +210,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                         runtime_options.rel_workdir,
                         startup=startup,
                         env=env,
-                        dry_run=runtime_options.dry_run)
+                        dry_run=parsed.dry_run)
 
     elif mode == 'docker':
         from docker import DockerClient
@@ -276,7 +235,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         if runtime_options.name is not None:
             name = f'{name}--{runtime_options.name}'
 
-        if runtime_options.dry_run:
+        if parsed.dry_run:
             raise ValueError('dry run is not yet supported for Docker mode')
 
         from docker.types import Mount
@@ -313,11 +272,11 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         docker_runner = DockerRunner(client, docker_lmndirs)
 
         print_conf(mode, machine, docker_pconf.image)
-        if runtime_options.sweep:
+        if parsed.sweep:
             if not runtime_options.disown:
                 logger.error("You must set -d option to use sweep functionality.")
                 import sys; sys.exit(1)
-            sweep_ind = parse_sweep_idx(runtime_options.sweep)
+            sweep_ind = parse_sweep_idx(parsed.sweep)
 
             single_sweep = (len(sweep_ind) == 1)
 
@@ -505,7 +464,7 @@ def handler_scheduler(
 
     timestamp = f"{time.time():.5f}".split('.')[-1]  # 5 subdigits of the timestamp
     print_conf(mode, machine, image=sing_conf.sif_file if mode in ['slurm-sing', 'sing-slurm'] else None)
-    if run_opt.sweep:
+    if parsed.sweep:
         if not run_opt.disown:
             logger.error("You must set -d option to use sweep functionality.")
             import sys; sys.exit(1)
@@ -514,7 +473,7 @@ def handler_scheduler(
             logger.error("You should set --contain option to use sweep functionality.")
             import sys; sys.exit(1)
 
-        sweep_ind = parse_sweep_idx(run_opt.sweep)
+        sweep_ind = parse_sweep_idx(parsed.sweep)
 
         _scheduler_conf = deepcopy(scheduler_conf)
         for sweep_idx in sweep_ind:
@@ -540,11 +499,11 @@ def handler_scheduler(
                         startup=startup,
                         timestamp=timestamp,
                         interactive=False, num_sequence=run_opt.num_sequence,
-                        env=env, dry_run=run_opt.dry_run)
+                        env=env, dry_run=parsed.dry_run)
     else:
         runner.exec(run_opt.cmd, run_opt.rel_workdir, conf=scheduler_conf,
                     startup=startup, timestamp=timestamp, interactive=not run_opt.disown, num_sequence=run_opt.num_sequence,
-                    env=env, dry_run=run_opt.dry_run)
+                    env=env, dry_run=parsed.dry_run)
 
 
 name = 'run'

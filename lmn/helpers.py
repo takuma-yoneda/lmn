@@ -143,6 +143,49 @@ def wrap_shebang(command, shell='bash'):
     return f"#!/usr/bin/env {shell}\n{command}"
 
 
+def parse_sweep_idx(sweep_str: str):
+    """Parse sweep format and return a list of indices to sweep over.
+
+    - format #0: 8 --> 8
+    - format #1: 1-9 --> range(1, 9 + 1) = [1, 2, ..., 9]
+    - format #2: 1,2,7 --> [1, 2, 7]
+    """
+    from lmn import logger
+    import re
+    from typing import Pattern
+    allowed_formats = """
+    `--sweep 8` --> 8
+    `--sweep 1-10` --> [1, 2, ..., 10]
+    `--sweep 1,2,7` --> [1, 2, 7]
+    """
+
+    def check_pattern(string: str, pattern: Pattern):
+        if not pattern.match(string):
+            logger.error(f'Invalid sweep range format. Allowed formats are:\n{allowed_formats}')
+            import sys; sys.exit(1)
+
+    if '-' in sweep_str:
+        # Validate the format
+        pattern = re.compile(r'^\d+-\d+$')
+        check_pattern(sweep_str, pattern)
+        begin, end = [int(val) for val in sweep_str.split('-')]
+        if begin >= end:
+            logger.error(f'Invalid sweep range: {begin} must be smaller than {end}')
+            import sys; sys.exit(1)
+        sweep_ind = range(begin, end + 1)
+    elif ',' in sweep_str:
+        pattern = re.compile(r'^\d+(,\d+)+$')
+        check_pattern(sweep_str, pattern)
+        sweep_ind = [int(e) for e in sweep_str.strip().split(',')]
+    elif sweep_str.isnumeric():
+        sweep_ind = [int(sweep_str)]
+    else:
+        logger.error(f'Invalid sweep range format. Allowed formats are:\n{allowed_formats}')
+        import sys; sys.exit(1)
+
+    return sweep_ind
+
+
 sacct_cmd = "sacct --starttime $(date -d '40 hours ago' +%D-%R) --endtime now --format JobID,JobName%-100,NodeList,Elapsed,State,ExitCode --parsable2"
 
 
