@@ -212,11 +212,31 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
         lmndirs = machine.get_lmndirs(project.name)
         env = {**project.env, **machine.env}
-        env_from_host = []
 
         base_url = "ssh://" + machine.base_uri
-        # client = DockerClient(base_url=base_url, use_ssh_client=True)
-        client = DockerClient(base_url=base_url)  # dockerpty hangs with use_ssh_client=True
+        # NOTE: dockerpty hangs with use_ssh_client=True
+        # But I have switched the docker + interactive to python-on-whales, so maybe it's fine for now
+        # If `use_ssh_client=False`, it uses paramiko internally.
+        # dockerpy uses paramiko to parse `~/.ssh/config` and look up corresponding configuration
+        # An annoying issue is that, when I have this entry in the config:
+        # ``` ~/.ssh/config
+        # Host elm
+        #     HostName elm.ttic.edu
+        #     User takuma
+        #     IdentityFile ~/.ssh/ttic
+        # ```
+        # dockerpy's implementation does not recognize this identity file
+        # unless base_url is set to "elm" rather than "elm.ttic.edu"
+        #
+        # paramiko also parses `~/.ssh/config/known_hosts` to look up hosts -> identity key mapping
+        # When this works, the issue I wrote above doesn't matter (in my understanding)
+        # However, somehow for the first ssh to a remote machine (after login),
+        # paramiko seems to always fail to parse the file (??)
+        #
+        # Because of all the complications,
+        # I'd prefer to use `use_ssh_client=True` that uses ssh binary rather than paramiko
+
+        client = DockerClient(base_url=base_url, use_ssh_client=True)
 
         # Specify job name
         name = f'{machine.user}-lmn-{project.name}'
