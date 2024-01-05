@@ -33,6 +33,12 @@ def _get_parser() -> ArgumentParser:
         help="Be verbose"
     )
     parser.add_argument(
+        "--with-startup",
+        default=False,
+        action="store_true",
+        help="run startup commands"
+    )
+    parser.add_argument(
         "remote_command",
         default=False,
         action="store",
@@ -69,7 +75,10 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
     env = {**project.env, **machine.env}
     lmndirs = machine.get_lmndirs(project.name)
 
-    startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
+    if parsed.with_startup:
+        startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
+    else:
+        startup = ''
 
     # If parsed.mode is not set, try to read from the config file.
     from lmn.runner import SSHRunner
