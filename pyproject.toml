@@ -12,10 +12,9 @@ dependencies = [
     "fabric",
     "randomname",
     "simple_slurm_command",
-    "dockerpty>=0.4.1",
     "pyjson5",
     "python-dotenv",
-    "python-on-whales>=0.53.0",
+    "python-on-whales>=0.68.0",
     "pydantic>=2.5.2",
 ]
 requires-python = ">=3.8"
