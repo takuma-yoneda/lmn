@@ -25,6 +25,10 @@ class MachineConfig(BaseModel):
     startup: Union[str, List[str]] = ''
     mode: str = 'ssh'
 
+    # LMN Directories
+    lmndirs: Optional[OptionalLMNDirectories] = None
+    container_lmndirs: Optional[OptionalLMNDirectories] = None
+
     # Container config
     docker: Optional[DockerContainerConfig] = None
     singularity: Optional[SingularityConfig] = None
@@ -32,3 +36,16 @@ class MachineConfig(BaseModel):
     # Scheduler config
     slurm: Optional[SlurmConfig] = None
     pbs: Optional[PBSConfig] = None
+
+
+class LMNDirectories(BaseModel):
+    codedir: str
+    mountdir: str
+    outdir: str
+    scriptdir: str
+
+class OptionalLMNDirectories(BaseModel):
+    codedir: Optional[str] = None
+    mountdir: Optional[str] = None
+    outdir: Optional[str] = None
+    scriptdir: Optional[str] = None

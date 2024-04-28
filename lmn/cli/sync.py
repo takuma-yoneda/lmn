@@ -29,7 +29,7 @@ def _sync_code(project: Project, machine: Machine, dry_run: bool = False):
     # rsync_options = f"--rsync-path='mkdir -p {project.remote_dir} && mkdir -p {project.remote_outdir} && mkdir -p {project.remote_mountdir} && rsync'"
 
     # A trick to create directories right before performing rsync
-    lmndirs = machine.get_lmndirs(project.name)
+    lmndirs = machine.lmndirs
     rsync_options = [f"--rsync-path='mkdir -p {lmndirs.codedir} && mkdir -p {lmndirs.outdir} && mkdir -p {lmndirs.mountdir} && mkdir -p {lmndirs.scriptdir} && rsync'"]
 
     try:
@@ -51,7 +51,7 @@ def _sync_output(project: Project, machine: Machine, dry_run: bool = False):
     # Rsync remote outdir with the local outdir.
     if project.outdir:
         try:
-            lmndirs = machine.get_lmndirs(project.name)
+            lmndirs = machine.lmndirs
             # Check if there's any output file (the first line is always 'total [num-files]')
             ssh_client = CLISSHClient(machine.remote_conf)
 

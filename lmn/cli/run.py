@@ -188,7 +188,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         from lmn.runner import SSHRunner
 
         startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
-        lmndirs = machine.get_lmndirs(project.name)
+        lmndirs = machine.lmndirs
         env = {**project.env, **machine.env}
 
         ssh_client = CLISSHClient(machine.remote_conf)
@@ -210,7 +210,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             raise ValueError('Configuration must have an entry for "docker" to use docker mode.')
 
         startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
-        lmndirs = machine.get_lmndirs(project.name)
+        lmndirs = machine.lmndirs
         env = {**project.env, **machine.env}
 
         base_url = "ssh://" + machine.base_uri
@@ -246,9 +246,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
         if parsed.dry_run:
             raise ValueError('dry run is not yet supported for Docker mode')
 
-        from docker.types import Mount
-        from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
-        docker_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
+        # from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
+        # docker_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
+        docker_lmndirs = machine.container_lmndirs
 
         docker_pconf = machine.parsed_conf.docker
         docker_pconf.name = name
@@ -259,10 +259,10 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
         if not runtime_options.no_sync:
             docker_pconf.mount_from_host.update({
-                f'{lmndirs.codedir}': docker_lmndirs.codedir,
-                f'{lmndirs.outdir}': docker_lmndirs.outdir,
-                f'{lmndirs.mountdir}': docker_lmndirs.mountdir,
-                f'{lmndirs.scriptdir}': docker_lmndirs.scriptdir,
+                f'{machine.lmndirs.codedir}': machine.container_lmndirs.codedir,
+                f'{machine.lmndirs.outdir}': machine.container_lmndirs.outdir,
+                f'{machine.lmndirs.mountdir}': machine.container_lmndirs.mountdir,
+                f'{machine.lmndirs.scriptdir}': machine.container_lmndirs.scriptdir,
             })
 
         if project.mount_from_host:
@@ -334,7 +334,7 @@ def handler_scheduler(
     import randomname
 
     startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])
-    lmndirs = machine.get_lmndirs(project.name)
+    lmndirs = machine.lmndirs
 
     ssh_client = CLISSHClient(machine.remote_conf)
 
@@ -409,8 +409,9 @@ def handler_scheduler(
             raise ValueError('Entry "singularity" not found in the config file.')
 
         # Overwrite lmn envvars.  Hmm I don't like this...
-        from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
-        sing_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
+        # from lmn.cli._config_loader import DOCKER_ROOT_DIR, get_docker_lmndirs
+        # sing_lmndirs = get_docker_lmndirs(DOCKER_ROOT_DIR, project.name)
+        sing_lmndirs = machine.container_lmndirs
 
         # Update `pwd` entry
         sing_conf = machine.parsed_conf.singularity

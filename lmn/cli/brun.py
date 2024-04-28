@@ -73,7 +73,7 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
                                 cmd=cmd)
 
     env = {**project.env, **machine.env}
-    lmndirs = machine.get_lmndirs(project.name)
+    lmndirs = machine.lmndirs
 
     if parsed.with_startup:
         startup = ' ; '.join([e for e in [project.startup, machine.startup] if e.strip()])

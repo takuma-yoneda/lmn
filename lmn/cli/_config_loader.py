@@ -9,6 +9,7 @@ from lmn import logger
 from lmn.helpers import find_project_root, parse_config
 from posixpath import expandvars
 
+from lmn.config import LMNDirectories
 from lmn.machine import RemoteConfig
 
 DOCKER_ROOT_DIR = '/lmn'
@@ -52,12 +53,16 @@ class Machine:
     """Maintains machine configuration.
     - RemoteConfig (user, hostname, uri)
     """
-    def __init__(self, remote_conf: RemoteConfig, lmndir: Union[str, Path],
+    def __init__(self,
+                 remote_conf: RemoteConfig,
+                 lmndirs: Union[str, Path],
+                 container_lmndirs: Union[str, Path],
                  parsed_conf: dict,
                  startup: Union[str, List[str]] = "",
                  env: Optional[dict] = None) -> None:
         self.remote_conf = remote_conf
-        self.lmndir = Path(lmndir)
+        self.lmndirs = lmndirs
+        self.container_lmndirs = container_lmndirs
         self.env = env if env is not None else {}
         startup = startup or parsed_conf.startup
         if isinstance(startup, list):
@@ -74,14 +79,14 @@ class Machine:
         """Returns user@hostname:path"""
         return f'{self.remote_conf.base_uri}:{path}'
     
-    def get_lmndirs(self, project_name: str) -> Namespace:
-        rootdir = self.lmndir / project_name
-        return Namespace(
-            codedir=str(rootdir / 'code'),
-            mountdir=str(rootdir / 'mount'),
-            outdir=str(rootdir / 'output'),
-            scriptdir=str(rootdir / 'script'),
-        )
+    # def get_lmndirs(self, project_name: str) -> Namespace:
+    #     rootdir = self.lmndir / project_name
+    #     return Namespace(
+    #         codedir=str(rootdir / 'code'),
+    #         mountdir=str(rootdir / 'mount'),
+    #         outdir=str(rootdir / 'output'),
+    #         scriptdir=str(rootdir / 'script'),
+    #     )
 
 
 def get_docker_lmndirs(lmndir: Union[Path, str], project_name: str) -> Namespace:
@@ -157,13 +162,40 @@ def load_config(machine_name: str):
 
     remote_conf = RemoteConfig(mconf.user, mconf.host)
 
+    # Setup lmndirs:
+    from lmn.cli._config_loader import DOCKER_ROOT_DIR
     if mconf.root_dir is None:
-        lmndir = f'{REMOTE_ROOT_DIR}/{remote_conf.user}/lmn'
+        lmn_rootdir = f'{REMOTE_ROOT_DIR}/{remote_conf.user}/lmn/{project.name}'
     else:
-        lmndir = f"{mconf.root_dir}/{remote_conf.user}"
+        lmn_rootdir = f'{mconf.root_dir}/{remote_conf.user}/{project.name}'
+    lmndirs = LMNDirectories(
+        codedir=str(Path(lmn_rootdir) / 'code'),
+        mountdir=str(Path(lmn_rootdir) / 'mount'),
+        outdir=str(Path(lmn_rootdir) / 'output'),
+        scriptdir=str(Path(lmn_rootdir) / 'script'),
+    )
+    container_lmndirs = LMNDirectories(
+        codedir=str(Path(DOCKER_ROOT_DIR) / 'code'),
+        mountdir=str(Path(DOCKER_ROOT_DIR) / 'mount'),
+        outdir=str(Path(DOCKER_ROOT_DIR) / 'output'),
+        scriptdir=str(Path(DOCKER_ROOT_DIR) / 'script'),
+    )
+
+    # Update lmndirs if the configurations exist in the mconf
+    remove_none_fn = lambda d: {k: v for k, v in d.items() if v is not None}
+    if mconf.lmndirs:
+        lmndirs = lmndirs.model_copy(
+            update=remove_none_fn(mconf.lmndirs.model_dump())
+        )
+    if mconf.container_lmndirs:
+        container_lmndirs = container_lmndirs.model_copy(
+            update=remove_none_fn(mconf.container_lmndirs.model_dump())
+        )
+
     machine = Machine(remote_conf,
                       parsed_conf=mconf,
-                      lmndir=lmndir,
+                      lmndirs=lmndirs,
+                      container_lmndirs=container_lmndirs,
                       env=mconf.environment)
 
     return project, machine, preset_conf
