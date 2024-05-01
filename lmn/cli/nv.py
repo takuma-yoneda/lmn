@@ -35,6 +35,7 @@ def _get_parser() -> ArgumentParser:
 
 def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict):
     parsed.remote_command = 'nvidia-smi'
+    parsed.with_startup = False  # HACK
     brun_handler(project, machine, parsed, preset)
 
 
