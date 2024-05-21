@@ -55,7 +55,7 @@ class Machine:
     """
     def __init__(self,
                  remote_conf: RemoteConfig,
-                 lmndirs: Union[str, Path],
+                 lmndirs: Union[str, LMNDirectories],
                  container_lmndirs: Union[str, Path],
                  parsed_conf: dict,
                  startup: Union[str, List[str]] = "",
@@ -173,12 +173,14 @@ def load_config(machine_name: str):
         mountdir=str(Path(lmn_rootdir) / 'mount'),
         outdir=str(Path(lmn_rootdir) / 'output'),
         scriptdir=str(Path(lmn_rootdir) / 'script'),
+        rootdir=str(lmn_rootdir),
     )
     container_lmndirs = LMNDirectories(
         codedir=str(Path(DOCKER_ROOT_DIR) / 'code'),
         mountdir=str(Path(DOCKER_ROOT_DIR) / 'mount'),
         outdir=str(Path(DOCKER_ROOT_DIR) / 'output'),
         scriptdir=str(Path(DOCKER_ROOT_DIR) / 'script'),
+        rootdir=str(Path(DOCKER_ROOT_DIR)),
     )
 
     # Update lmndirs if the configurations exist in the mconf

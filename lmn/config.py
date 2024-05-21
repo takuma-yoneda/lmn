@@ -43,9 +43,12 @@ class LMNDirectories(BaseModel):
     mountdir: str
     outdir: str
     scriptdir: str
+    rootdir: str
+
 
 class OptionalLMNDirectories(BaseModel):
     codedir: Optional[str] = None
     mountdir: Optional[str] = None
     outdir: Optional[str] = None
     scriptdir: Optional[str] = None
+    rootdir: Optional[str] = None

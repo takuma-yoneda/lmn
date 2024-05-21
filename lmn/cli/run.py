@@ -171,9 +171,18 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
             # Generate a unique path and set it to machine.lmndir
             from lmn.helpers import get_timestamp
             _hash = get_timestamp()
-            machine.lmndir = Path(f'{machine.lmndir}/{_hash}')
+
+            # HACK: Dirty but just overwrite machine.lmndirs with new paths
+            # Add the hash to lmndirs
+            new_lmn_root = Path(machine.lmndirs.rootdir) / _hash
+            machine.lmndirs.codedir =  new_lmn_root / 'code'
+            machine.lmndirs.mountdir = new_lmn_root / 'mount'
+            machine.lmndirs.outdir = new_lmn_root / 'output'
+            machine.lmndirs.scriptdir = new_lmn_root / 'script'
+            # machine.lmndir = Path(f'{machine.lmndir}/{_hash}')
+
             runtime_options.name = _hash
-            logger.info(f'--contain flag is set.\n\tsetting the remote lmndir to {machine.lmndir}\n\tsetting jobs suffix to {_hash}')
+            logger.info(f'--contain flag is set.\n\tsetting the remote lmndir to {new_lmn_root}\n\tsetting jobs suffix to {_hash}')
 
         _sync_code(project, machine, parsed.dry_run)
 
