@@ -246,6 +246,7 @@ class SlurmRunner:
                                      time=s.time,
                                      nodelist=s.nodelist,
                                      exclude=s.exclude,
+                                     gpus=s.gpus,
                                      constraint=s.constraint,
                                      dependency=s.dependency,
                                      output=s.output,

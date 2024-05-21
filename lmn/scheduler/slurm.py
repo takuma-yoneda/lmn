@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Union
 
 # TODO: Implement SlurmCommand by myself
 from simple_slurm_command import SlurmCommand
@@ -21,4 +21,5 @@ class SlurmConfig(BaseModel):
     dependency: Optional[str] = None
     nodelist: Optional[str] = None
     exclude: Optional[str] = None
+    gpus: Optional[Union[str, int]] = 1
     shell: str = 'bash'
