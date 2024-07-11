@@ -174,8 +174,9 @@ def handler(project: Project, machine: Machine, parsed: Namespace, preset: dict)
 
             # HACK: Dirty but just overwrite machine.lmndirs with new paths
             # Add the hash to lmndirs
-            new_lmn_root = Path(machine.lmndirs.rootdir) / _hash
-            machine.lmndirs.codedir =  new_lmn_root / 'code'
+            rootdir = Path(machine.lmndirs.rootdir)
+            new_lmn_root = rootdir.parent / (rootdir.name + f'--{_hash}')
+            machine.lmndirs.codedir = new_lmn_root / 'code'
             machine.lmndirs.mountdir = new_lmn_root / 'mount'
             machine.lmndirs.outdir = new_lmn_root / 'output'
             machine.lmndirs.scriptdir = new_lmn_root / 'script'
